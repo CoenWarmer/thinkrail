@@ -297,35 +297,16 @@ channel fan-out, and the process-boot wrapper both launchers share.
   fresh process yet, so every mark found necessarily predates it. Without this, a review in flight at the
   last shutdown would spin `Reviewing…` forever and Review All would skip the item forever (its own
   `reviewing !== true` filter);
-  `ackSend.ts` (the send-ack policy — see "Get right"); `autoRename.ts` (the **workspace auto-rename
-  flow** — the composition of `agent` + `assist` + `workspaces` only the host may make, in **two passes**
-  the session-publisher closure in `createServer` tees fire-and-forget, both triggering a
-  `renameWorkspace` (which **self-emits `workspace.updated`** through the lifecycle publisher — the tee no
-  longer pushes) and both reading the session **transcript** via `getSessionMessages` (never `agent_end.messages` — that
-  array is run-local and empty of the prompt on auto-retry continuations) then `extractFirstTurn` (assist
-  skips killed error/aborted turns, so a retracted prompt never becomes the name); an injectable
-  transcript reader is the unit-test seam:
-  - **Naive (instant):** `maybeNaiveNameWorkspace(sessionId, workspaceId)` when the **first prompt lands**
-    (`isPromptCommitted(event)`, exported: a **user `message_end`** — `agent_start`/`turn_start` fire
-    *before* the prompt's `message_end`, so the transcript wouldn't yet hold the prompt at those; this
-    still fires before the model responds, so the name is instant and no tool/question can block it). It
-    derives a **display name** from the first prompt with assist's non-agentic `naiveWorkspaceName` (no
-    model call) and renames **provisionally** (`renameWorkspace(..., { lock: false })` — name + derived
-    branch move but `renamed` stays unset). It fires only on a **pristine** workspace (`!renamed` AND its
-    **branch** still `workspace-N` — gated on the branch, not the display name, so the two stay decoupled),
-    so it lands once and never overwrites a user/agentic name; a per-workspace `naiveInFlight`
-    set dedupes re-fired prompt-commits. This is why a long first turn no longer leaves the workspace as
-    `workspace-N` for minutes.
-  - **Agentic (refine):** `maybeAutoRenameWorkspace(sessionId, workspaceId)` on every **settled** turn
-    (`isSettledTurn(event)`, exported: `agent_settled` — never `agent_end`, which is attempt-level and can
-    precede compaction/retry even when `willRetry` is false). It asks assist for a
-    human-readable name (cheap model), re-checks the workspace (exists, not `renamed`) after the await,
-    then calls `renameWorkspace` in the same tick — upgrading the provisional naive name into the final
-    name (and its derived branch) and **locking** it (`renamed: true`). Best-effort by contract: every failure path resolves `null` and
-    leaves the flag unset so a later settled turn retries — but a swallowed exception is warn-logged
-    (a broken rename path must stay distinguishable from "assist had nothing"). Its own per-workspace
-    **in-flight set** (independent of the naive one — the two passes can overlap on a short turn) dedupes
-    concurrent turns/sessions.
+  `ackSend.ts` (the send-ack policy — see "Get right"); `renameTool.ts` (the **agentic rename** handler behind agent's
+  `rename_session` tool, installed via `setRenameSessionHandler` — the composition of `agent` +
+  `workspaces` only the host may make). It resolves the calling session's workspace, then applies
+  each requested target independently and reports each as renamed or skipped with a reason: `chatTitle` →
+  `renameSession(..., { source: "agent" })` (skipped when the chat carries a manual-title marker);
+  `workspaceName` → skipped for a `renamed` (manual/user-named), Default, or external workspace, else
+  `renameWorkspace(id, name, { lock: false })` (the workspaces module keeps a pushed branch in place, so
+  the result may report the display name renamed but the branch kept). An agentic rename never locks, so the agent may rename again as focus shifts. Invalid names
+  surface as a skip, not a thrown tool error. There is **no programmatic naming**: no prompt-commit,
+  settled-turn, or first-send hook renames anything;
   - The **workspace-archive teardown** — the other composition of `agent` + `terminal` + `workspaces` only
     the host may make. `workspace.remove` **rejects a `kind: "default"` workspace loudly, before any
     side-effect** (the record's `worktreePath` is the project folder — the reclaim's `rm -rf` fallback
@@ -342,8 +323,7 @@ channel fan-out, and the process-boot wrapper both launchers share.
     the reclaim) are down before the dir is deleted, since they hold it as cwd, and the workspace's
     todo-mutation queue is settled (`settleChangeArtifacts`) between the two — an in-flight reconcile's
     plan/baseline writes land before the reclaim that sweeps them, never after it into a resurrected dir. Best-effort by contract —
-    a failed background teardown is warn-logged, never thrown into the void (nothing awaits it), like
-    the auto-rename tee. **Archive keeps the branch but not the chat:** the git branch stays (code is
+    a failed background teardown is warn-logged, never thrown into the void (nothing awaits it). **Archive keeps the branch but not the chat:** the git branch stays (code is
     recoverable), yet chat history is purged with the worktree — a deliberate scope choice, not a leak.
 - **Review state is host-composed and serialized per workspace** (`reviewLock.ts`): `review.send*` is
   `reviews` (drafts + package) plus `agent` (session) plus `reviews` again (mark sent + link) — a
@@ -430,17 +410,9 @@ channel fan-out, and the process-boot wrapper both launchers share.
   the welcome clears the frontend's stale popup projection. Popup `feedback.respond` actions are ordinary
   replay-safe requests and never alter the Settings link.
 - **Chat titles:** `session.rename` resolves `workspaceId` to its cwd and delegates title validation plus the
-  unconditional durable write to `agent`; it never patches one client directly. Immediately before each user
-  send dispatch, the host copies the live Pi transcript without awaiting or starting naming work. Only after
-  that send is accepted does the detached auto-title path proceed, and only when the snapshot has no earlier
-  non-control title-eligible user prompt and the Pi name is absent. Thus a first text turn already present when
-  a session is reattached consumes the opportunity across a host restart; a later request can never become the
-  naming source. `assist` produces a bounded cheap-model candidate or deterministic fallback, and `agent`
-  applies it with `onlyIfUnnamed` after the await. Naming never delays the send's dispatch or ack, and failures
-  stay best-effort (warn-log an unexpected write failure; no user-facing send failure). Image-only, blank,
-  punctuation-only, and internal control sends do not consume the opportunity; a later accepted text prompt
-  may. Concurrent first sends remain per-session single-flighted. There is no settled-turn or per-turn retitle
-  hook. Both manual and automatic writes converge every client through the existing
+  unconditional durable write to `agent` with `source: "manual"` (which also locks the chat against agentic
+  renames); it never patches one client directly. The only other writer is the agentic `rename_session`
+  handler above; sends never trigger naming. Both writes converge every client through the existing
   `pi.event`/`session_info_changed` channel and `session.list` repair; no new push channel exists.
 
 `RunningServer.startAttributionClaim()` is the explicit launcher-readiness signal and rechecks the saved

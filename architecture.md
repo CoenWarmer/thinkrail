@@ -123,14 +123,14 @@ dependency. This keeps test process drivers outside both launchers and the serve
 
    **Chat-title contract.** A workspace display name, its Git branch/cwd,
    and each chat title are independent identities; no rename cascades between them. A chat title is pi's
-   durable session name (`session_info`), never browser view state or a host sidecar. An unnamed chat gets
-   one best-effort title from its first accepted text prompt through a bounded, tool-free one-shot completion
-   running in parallel with the agent; unavailable or unusable generation falls back to deterministic
-   prompt-derived text and can never delay or fail the message send. The write is conditional on the pi name
-   still being absent, so any durable manual name always wins. Later turns never retitle automatically;
-   scope drift is handled by manual rename (with explicit user-triggered regeneration a possible later
-   feature). Clients hydrate `SessionSummary.title`, converge live on `session_info_changed`, and continue to
-   route by session id, so duplicate human titles are legal.
+   durable session name (`session_info`), never browser view state or a host sidecar. **Names change only
+   two ways: manually by the user, or agentically by the main agent calling the `rename_session` tool** —
+   there is no programmatic/heuristic naming. The tool renames the calling chat, its workspace (display name
+   plus derived branch while the branch is unpushed), or both, and is guided to keep names relevant as the
+   session's focus evolves. A manual rename is final per target: a manually named workspace (`renamed`) or
+   chat (a durable manual-title marker in the pi session) is never renamed by the agent again. Clients
+   hydrate `SessionSummary.title`, converge live on `session_info_changed`, and continue to route by session
+   id, so duplicate human titles are legal.
 9. **Domain state, frontend-local frame, and workspace-local views.** *Domain* state — projects,
    workspaces, **sessions + their transcripts**, terminal catalogs/PTYs, and git — is backend-owned, shared,
    and persistent; every client hydrates it from the host. Current workbench state is view state and never

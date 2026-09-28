@@ -83,7 +83,7 @@ internals**. The edges between them are owned here (see the dependency graph), n
 | `terminal` | workspace-scoped `bun-pty` terminals | [terminal/SPEC.md](src/terminal/SPEC.md) |
 | `agent` | in-process pi sessions + current/retained runtime generations + one-shot completions | [agent/SPEC.md](src/agent/SPEC.md) |
 | `auth` | provider status/login plus native JetBrains Central lifecycle and quota orchestration | [auth/SPEC.md](src/auth/SPEC.md) |
-| `assist` | ad-hoc one-shot tasks (workspace naming, …) on a cheap model, best-effort | [assist/SPEC.md](src/assist/SPEC.md) |
+| `assist` | ad-hoc one-shot tasks (completed-plan summary drafting) on a cheap model, best-effort | [assist/SPEC.md](src/assist/SPEC.md) |
 | `analytics` | always-on basic events + preference-controlled optional insights → PostHog sink (privacy contract in its spec) | [analytics/SPEC.md](src/analytics/SPEC.md) |
 | `feedback` | host-scoped usage count + addressed product-interview invitation lifecycle | [feedback/SPEC.md](src/feedback/SPEC.md) |
 | `dialog` | the host's native folder picker | [dialog/SPEC.md](src/dialog/SPEC.md) |
@@ -111,7 +111,7 @@ the host from env via `bootHost` for dev/e2e.
   cross-cutting edge, like `persistence`, exempt from the never-each-other rule (today: `host`,
   `agent`, `workspaces`, `watch`, `git`, `todos`, `reviews`, `analytics`). `persistence` never imports
   `log` (would cycle); `initLogging` is called only from `host`'s `bootHost`
-- `todos` → `workspaces` (worktree path lookup) + `pi-todos/core` (external, value-imported, pi-free)
+- `todos` → `workspaces` (worktree path lookup), `assist` (`suggestPlanSummary`) + `pi-todos/core` (external, value-imported, pi-free)
 - `reviews` → `workspaces` (worktree path lookup), `persistence` (data dir), `git` (the review's baseSha
   resolve, plus the diff range + blob read behind a base-side anchor). The `review.send*` flows are
   **composed in `host`'s handlers** (reviews builds the package, `agent` runs the session — no

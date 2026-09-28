@@ -140,8 +140,8 @@ than teaching the pure layout engine how sessions are persisted. A commit has no
 inline editor returns to the prior host-owned label until the existing `session_info_changed` store fold
 updates open tabs and closed history everywhere; rejection retains that snapshot and raises the standard
 error toast. Renaming a closed chat does not open or select it; renaming an open chat does not change placement
-or focus. Automatic title arrival uses this same label fold but opens no editor, notification, or focus
-transition. ChatView's `/name` command is the independent keyboard entry point to the same wire mutation.
+or focus. Agentic (`rename_session`) title arrival uses this same label fold but opens no editor,
+notification, or focus transition. ChatView's `/name` command is the independent keyboard entry point to the same wire mutation.
 
 ## Global chords
 

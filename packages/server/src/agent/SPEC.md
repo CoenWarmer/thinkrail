@@ -373,7 +373,7 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
     returned result is not persisted ahead of attach-time repair. `disposeAllSessions` remains the synchronous
     emergency stop, but registers its best-effort child cascades
     in the same pending set; `getSessionWorkspaceId(sessionId)` (the live session→workspace
-    lookup the host's auto-rename hook keys on); `removeSession`/`disposeAllSessions`;
+    lookup the host's tool handlers key on); `removeSession`/`disposeAllSessions`;
     **`removeWorkspaceSessions(workspaceId, cwd?)`** (the **archive teardown**: abort a streaming turn,
     including an unanswered question—destructive workspace removal intentionally does not preserve a dialog
     for restart—then dispose every live session for the workspace **unconditionally** — bypassing the per-chat delete
@@ -410,8 +410,8 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
     the model's auth itself (OAuth refresh included) and also serves providers that only implement
     `streamSimple` (extension-registered ones). `pickModel(tier)` = the model choice: `cheap` prefers a
     curated small/fast allowlist ∩ the authenticated set, else the cheapest by per-token cost; `default`
-    = first available; `null` when nothing is authenticated. This is the primitive the `assist` tasks
-    (workspace naming, PR drafting) run on — the only place model **dispatch** happens outside a session.
+    = first available; `null` when nothing is authenticated. The only place model **dispatch** happens
+    outside a session (consumed by the `assist` tasks and the on-demand workflow harness).
   - `webUiContext` — `createWebUiContext(sessionId)` builds the `ExtensionUIContext` pi calls (dialogs
     round-trip to the browser, fire-and-forget methods push); `setExtUiPublisher`
     (server→client push seam), `resolveExtUi` (browser reply), `cancelExtUiForSession` (on dispose),
@@ -570,6 +570,11 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
     streaming-deferred to `agent_settled`, exactly like the subagent tools. Because `setActiveToolsByName`
     rebuilds the system prompt from active tools' guidelines, dropping the tool drops its guidance too. Only
     the tool is gated — the `startPlanReview` button path is a separate host seam. See `submodule-server-host-plan-review`.
+    The `rename_session` tool (`renameTool.ts`) is always registered and active: params
+    `{ chatTitle?, workspaceName? }` (at least one), its description/guidelines steer the agent to name the
+    chat/workspace once the task is understood and rename only when the session's focus materially changes.
+    It delegates to the host-installed `setRenameSessionHandler` seam (no `agent` → `workspaces` edge) and
+    returns the handler's per-target text; a skipped target is a normal result, not a tool error.
     Cascades: `removeSession`/`disposeAllSessions` fire
     `disposeSessionChildren` — `removeSession` returns that cascade, the **delete transaction
     awaits it before `publishDeleted`/resolving** (safe: the cascade carries its own swallow, so a
@@ -760,25 +765,19 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
 ## Session titles
 
 `agentSessionManager` is the only durable chat-title writer. Its `renameSession(sessionId,
-workspaceId, cwd, title, { onlyIfUnnamed? })` validates one non-blank, single-line title within contracts'
+workspaceId, cwd, title, { source })` validates one non-blank, single-line title within contracts'
 length limit, resolves the session strictly inside the supplied workspace/cwd, and avoids an append when the
 normalized title is already current. A live session writes through `AgentSession.setSessionName`; a disk-only
 session opens its exact transcript with `SessionManager.open(...).appendSessionInfo(...)` without attaching an
 agent or resolving a model. Both paths publish the same `session_info_changed` Pi event, while
 `SessionSummary.title` remains the hydration projection.
 
-`getSessionName(sessionId)` exposes only a live session's current Pi name so the host can skip title-model
-work once one exists. `getSessionMessagesSnapshot(sessionId)` returns a copied, renderable-role view of that
-same live Pi transcript without attaching or awaiting; the host captures it before dispatch solely to decide,
-after acceptance, whether an earlier title-eligible prompt already consumed automatic naming. A reattached
-session therefore carries that decision through a host restart without title provenance or a sidecar.
-
-The guarded write remains authoritative across the async race. `onlyIfUnnamed` performs the check immediately
-beside the append and is the auto-title compare-and-set; the manual wire mutation is unconditional. Thus an
-async helper cannot overwrite a durable name that landed while it was running. No generated/manual provenance
-or title sidecar belongs here—the absent-vs-present pi name plus the durable transcript are sufficient because
-automatic naming gets one opportunity. The architecture's accepted no-cross-process coordination rule still
-applies.
+Provenance is one durable marker: a `source: "manual"` write also appends a `thinkrail.manual-title` custom
+entry (not LLM context) to the same pi session, so the lock survives restarts with no sidecar. A
+`source: "agent"` write is a compare-and-set inside the same serialized file operation: it returns
+`"locked"` without writing when any such entry exists. Results are `"renamed" | "unchanged" | "locked"`.
+The manual wire mutation is unconditional and final — there is no unlock. The architecture's accepted
+no-cross-process coordination rule still applies.
 
 ## Get right
 

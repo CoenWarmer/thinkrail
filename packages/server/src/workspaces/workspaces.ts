@@ -381,6 +381,12 @@ export function refreshUserOwnedWorkspace(workspaceId: string): void {
 	emit({ kind: "updated", workspace });
 }
 
+function isBranchPushed(repo: string, branch: string): boolean {
+	if (git(repo, ["config", "--get", `branch.${branch}.remote`]).ok) return true;
+	const remote = git(repo, ["for-each-ref", "--format=%(refname)", `refs/remotes/*/${branch}`]);
+	return remote.ok && remote.out.trim() !== "";
+}
+
 export function renameWorkspace(
 	id: string,
 	requestedName: string,
@@ -398,7 +404,8 @@ export function renameWorkspace(
 		throw new Error("An existing worktree cannot be renamed by ThinkRail");
 	const displayName = toDisplayName(requestedName);
 	if (!displayName) throw new Error(`Invalid workspace name: ${requestedName}`);
-	const wanted = renameBranch ? toBranch(displayName) : ws.branch;
+	const wanted =
+		renameBranch && !isBranchPushed(project.path, ws.branch) ? toBranch(displayName) : ws.branch;
 	const branch = wanted === ws.branch ? ws.branch : uniqueBranch(project, wanted);
 	const branchChanged = branch !== ws.branch;
 	if (branchChanged) {

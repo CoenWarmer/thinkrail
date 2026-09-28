@@ -428,7 +428,21 @@ test("renameWorkspace with renameBranch:false changes only the display name", as
 	expect(listed.find((workspace) => workspace.id === sibling.id)?.baseBranch).toBe(ws.branch);
 });
 
-test("renameWorkspace with lock:false renames name + branch but leaves renamed unset (provisional)", async () => {
+test("renameWorkspace keeps a pushed branch (remote-tracking ref or upstream) and renames only the display name", async () => {
+	const tracked = await createWorkspace("p1");
+	git(repo, "update-ref", `refs/remotes/origin/${tracked.branch}`, "HEAD");
+	const keptByRef = renameWorkspace(tracked.id, "Agent Name", { lock: false });
+	expect(keptByRef).toMatchObject({ name: "Agent Name", branch: tracked.branch });
+	expect(keptByRef.renamed).toBeUndefined();
+
+	const upstream = await createWorkspace("p1");
+	git(repo, "config", `branch.${upstream.branch}.remote`, "origin");
+	const keptByUpstream = renameWorkspace(upstream.id, "Other Name", { lock: false });
+	expect(keptByUpstream).toMatchObject({ name: "Other Name", branch: upstream.branch });
+	expect(gitOut(upstream.worktreePath, "rev-parse", "--abbrev-ref", "HEAD")).toBe(upstream.branch);
+});
+
+test("renameWorkspace with lock:false renames name + branch but leaves renamed unset (agentic)", async () => {
 	const ws = await createWorkspace("p1");
 	const renamed = renameWorkspace(ws.id, "add login flow", { lock: false });
 

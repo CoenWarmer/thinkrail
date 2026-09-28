@@ -80,12 +80,6 @@ import {
 	stopAllWatches,
 } from "../watch";
 import { getWorkspace, refreshUserOwnedWorkspace, setWorkspacePublisher } from "../workspaces";
-import {
-	isPromptCommitted,
-	isSettledTurn,
-	maybeAutoRenameWorkspace,
-	maybeNaiveNameWorkspace,
-} from "./autoRename";
 import { setFsNudgePublisher } from "./fsNudge";
 import { handleRequest, requestMethodDiagnostic } from "./handlers";
 import { provisionInitialTerminal } from "./initialTerminal";
@@ -97,6 +91,7 @@ import {
 	observeCurrentSetup,
 	setupObservation,
 } from "./productAnalytics";
+import { installRenameSessionSeam } from "./renameTool";
 import { RequestReplayCache } from "./requestReplayCache";
 import {
 	installRequestReviewSeam,
@@ -576,6 +571,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 		resolvedBody: resolveCommentFromAgent(sessionId, commentId, note).body,
 	}));
 	installRequestReviewSeam();
+	installRenameSessionSeam();
 	reconcilePendingReviewsOnBoot();
 
 	setSettingsPublisher((config, appliedUpdate) => {
@@ -635,13 +631,6 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 			WS_CHANNELS.piEvent,
 			JSON.stringify({ channel: WS_CHANNELS.piEvent, data: payload }),
 		);
-		if (isPromptCommitted(payload.event)) {
-			const workspaceId = getSessionWorkspaceId(payload.sessionId);
-			if (workspaceId) void maybeNaiveNameWorkspace(payload.sessionId, workspaceId);
-		} else if (isSettledTurn(payload.event)) {
-			const workspaceId = getSessionWorkspaceId(payload.sessionId);
-			if (workspaceId) void maybeAutoRenameWorkspace(payload.sessionId, workspaceId);
-		}
 		if (isTodoToolEnd(payload.event)) {
 			const workspaceId = getSessionWorkspaceId(payload.sessionId);
 			const observeCompletion = taskObservation.toolFinished(payload.sessionId, payload.event);

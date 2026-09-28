@@ -10,6 +10,7 @@ import type {
 	WorkspaceWatchReadyResult,
 } from "@thinkrail/contracts";
 import { TodoStore } from "pi-todos/core";
+import { MANUAL_TITLE_CUSTOM_TYPE } from "../agent";
 import { recordAcceptedMessage, resetFeedbackForTests, setFeedbackPublisher } from "../feedback";
 import { defaultSessionDirFor, writeFixtureSession } from "../history/testFixtures";
 import { addComment, getReviewSnapshot } from "../reviews";
@@ -198,6 +199,11 @@ test("session.rename persists a bounded title into a closed Pi transcript", asyn
 			),
 		).toEqual({ ok: true });
 		expect(SessionManager.open(fixture.path).getSessionName()).toBe("After rename");
+		expect(
+			SessionManager.open(fixture.path)
+				.getEntries()
+				.some((entry) => entry.type === "custom" && entry.customType === MANUAL_TITLE_CUSTOM_TYPE),
+		).toBe(true);
 		await expect(
 			handleRequest(
 				"session.rename",

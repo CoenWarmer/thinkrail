@@ -475,18 +475,10 @@ export function getSessionRuntimeGeneration(sessionId: string): PiRuntimeGenerat
 	return hasSession(sessionId) ? sessions.get(sessionId)?.generation : undefined;
 }
 
-export function getSessionName(sessionId: string): string | undefined {
-	return sessions.get(sessionId)?.session.sessionName;
-}
-
 function transcriptMessages(session: AgentSession): TranscriptMessage[] {
 	return session.messages.filter((message) =>
 		isTranscriptMessageRole(message.role),
 	) as TranscriptMessage[];
-}
-
-export function getSessionMessagesSnapshot(sessionId: string): TranscriptMessage[] {
-	return transcriptMessages(mustGet(sessionId));
 }
 
 export async function reloadSessionResources(sessionId: string): Promise<void> {
@@ -912,8 +904,30 @@ function serializeSessionFileOperation<T>(
 	});
 }
 
-export interface RenameSessionOptions {
-	onlyIfUnnamed?: boolean;
+export const MANUAL_TITLE_CUSTOM_TYPE = "thinkrail.manual-title";
+
+export type RenameSource = "manual" | "agent";
+export type RenameSessionResult = "renamed" | "unchanged" | "locked";
+
+function hasManualTitle(manager: SessionManager): boolean {
+	return manager
+		.getEntries()
+		.some((entry) => entry.type === "custom" && entry.customType === MANUAL_TITLE_CUSTOM_TYPE);
+}
+
+function applyTitle(
+	manager: SessionManager,
+	current: string | undefined,
+	title: string,
+	source: RenameSource,
+	write: () => void,
+): RenameSessionResult {
+	const locked = hasManualTitle(manager);
+	if (source === "agent" && locked) return "locked";
+	if (source === "manual" && !locked) manager.appendCustomEntry(MANUAL_TITLE_CUSTOM_TYPE);
+	if (current === title) return "unchanged";
+	write();
+	return "renamed";
 }
 
 export function renameSession(
@@ -921,8 +935,8 @@ export function renameSession(
 	workspaceId: string,
 	cwd: string,
 	title: string,
-	options: RenameSessionOptions = {},
-): Promise<boolean> {
+	source: RenameSource,
+): Promise<RenameSessionResult> {
 	const normalized = normalizeSessionTitle(title);
 	if (!normalized) return Promise.reject(new Error("Invalid session title"));
 	return serializeSessionFileOperation(sessionId, async () => {
@@ -930,10 +944,10 @@ export function renameSession(
 		const live = sessions.get(sessionId);
 		if (live) {
 			if (live.workspaceId !== workspaceId) throw new Error(`Unknown session: ${sessionId}`);
-			const current = live.session.sessionName;
-			if ((options.onlyIfUnnamed && current !== undefined) || current === normalized) return false;
-			live.session.setSessionName(normalized);
-			return true;
+			const { session } = live;
+			return applyTitle(session.sessionManager, session.sessionName, normalized, source, () =>
+				session.setSessionName(normalized),
+			);
 		}
 
 		const info = (await listSessionInfosStrict(cwd)).find(
@@ -943,11 +957,10 @@ export function renameSession(
 			throw new Error(`Unknown session: ${sessionId}`);
 		}
 		const manager = SessionManager.open(info.path);
-		const current = manager.getSessionName();
-		if ((options.onlyIfUnnamed && current !== undefined) || current === normalized) return false;
-		manager.appendSessionInfo(normalized);
-		publish({ sessionId, event: { type: "session_info_changed", name: normalized } });
-		return true;
+		return applyTitle(manager, manager.getSessionName(), normalized, source, () => {
+			manager.appendSessionInfo(normalized);
+			publish({ sessionId, event: { type: "session_info_changed", name: normalized } });
+		});
 	});
 }
 

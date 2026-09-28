@@ -25,6 +25,12 @@ export {
 	settledAvailableModels,
 } from "./piRuntime";
 export {
+	RENAME_SESSION_TOOL_NAME,
+	type RenameSessionHandler,
+	type RenameSessionParams,
+	setRenameSessionHandler,
+} from "./renameTool";
+export {
 	REQUEST_REVIEW_TOOL_NAME,
 	type RequestReviewHandler,
 	requestReviewExtension,

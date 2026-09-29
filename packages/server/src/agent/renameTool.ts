@@ -23,7 +23,7 @@ const PROMPT_SNIPPET =
 	"rename_session: name this chat and its workspace after what the session is for; keep them relevant.";
 
 const PROMPT_GUIDELINES = [
-	"In the first turn of every session, call rename_session with both chatTitle and workspaceName before you write your reply — even when the request is a one-line question or asks for a short answer — so the user always remembers why this session was started. This does not count as editing files or using tools for the user's task.",
+	"On the first turn, once you know the session's purpose, call rename_session with both chatTitle and workspaceName before replying — including for short answers — unless the user explicitly forbids tools or limits you to specific tools. Their tool restrictions take precedence over naming.",
 	"Later, call rename_session again only when the session's focus materially changes, so the names stay relevant to what is really happening.",
 	"Names are short and outcome-focused (e.g. 'Fix login redirect'), never the raw prompt or tool/process wording. Rename silently — do not mention it to the user.",
 	"If rename_session reports a target skipped because the user named it manually, accept it and do not retry.",

@@ -571,9 +571,10 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
     rebuilds the system prompt from active tools' guidelines, dropping the tool drops its guidance too. Only
     the tool is gated — the `startPlanReview` button path is a separate host seam. See `submodule-server-host-plan-review`.
     The `rename_session` tool (`renameTool.ts`) is always registered and active: params
-    `{ chatTitle?, workspaceName? }` (at least one), a `promptSnippet` plus guidelines that make the first turn
-    of every session name both targets before replying and rename only when the session's focus materially
-    changes (without the explicit first-turn instruction, strong models skip it on short answers).
+    `{ chatTitle?, workspaceName? }` (at least one), a `promptSnippet` plus guidelines to name both targets
+    on the first turn before replying and rename again only when the session's focus materially changes.
+    Explicit user restrictions against tools or allowing only specific tools take precedence; the naming
+    guidance must not claim the rename tool is exempt.
     It delegates to the host-installed `setRenameSessionHandler` seam (no `agent` → `workspaces` edge) and
     returns the handler's per-target text; a skipped target is a normal result, not a tool error.
     Cascades: `removeSession`/`disposeAllSessions` fire

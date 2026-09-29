@@ -20,9 +20,10 @@ test("renameSessionExtension always registers the tool", () => {
 test("tool guidance asks for both names on the first turn and retitles only when focus changes", () => {
 	const tool = createRenameSessionTool();
 	const guidance = [tool.promptSnippet, ...(tool.promptGuidelines ?? [])].join(" ");
-	expect(guidance).toContain("first turn of every session");
+	expect(guidance).toContain("On the first turn");
 	expect(guidance).toContain("both chatTitle and workspaceName");
 	expect(guidance).toContain("focus materially changes");
+	expect(guidance).toContain("tool restrictions take precedence");
 });
 
 test("the tool delegates to the host handler with the calling session and requires a target", async () => {

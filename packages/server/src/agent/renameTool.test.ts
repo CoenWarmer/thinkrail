@@ -17,6 +17,14 @@ test("renameSessionExtension always registers the tool", () => {
 	expect(registered).toEqual([RENAME_SESSION_TOOL_NAME]);
 });
 
+test("tool guidance asks for both names on the first turn and retitles only when focus changes", () => {
+	const tool = createRenameSessionTool();
+	const guidance = [tool.promptSnippet, ...(tool.promptGuidelines ?? [])].join(" ");
+	expect(guidance).toContain("first turn of every session");
+	expect(guidance).toContain("both chatTitle and workspaceName");
+	expect(guidance).toContain("focus materially changes");
+});
+
 test("the tool delegates to the host handler with the calling session and requires a target", async () => {
 	const calls: unknown[] = [];
 	setRenameSessionHandler(async (sessionId, params) => {

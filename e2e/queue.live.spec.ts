@@ -69,7 +69,8 @@ test("queueing: pending strip + canonical order; per-row edit/remove; interrupt 
 	await expect(page.getByTestId("queue-item")).toHaveCount(2);
 
 	await page
-		.locator('[data-testid="queue-item"][data-index="0"]')
+		.getByTestId("queue-item")
+		.filter({ hasText: "first queued edit" })
 		.getByTestId("queue-item-remove")
 		.click();
 	await expect(page.getByTestId("queue-item")).toHaveCount(1);

@@ -4,7 +4,7 @@ import {
 	renameSession,
 	setRenameSessionHandler,
 } from "../agent";
-import { getWorkspace, renameWorkspace } from "../workspaces";
+import { getWorkspace, renameAgentWorkspace } from "../workspaces";
 
 function errorText(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
@@ -23,14 +23,14 @@ async function renameChat(sessionId: string, workspaceId: string, title: string)
 	}
 }
 
-function renameWorkspaceFor(workspaceId: string, name: string): string {
+async function renameWorkspaceFor(workspaceId: string, name: string): Promise<string> {
 	try {
 		const ws = getWorkspace(workspaceId);
 		if (ws.kind === "default") return "Workspace: skipped — the Default workspace keeps its name.";
 		if (ws.kind === "external")
 			return "Workspace: skipped — an existing worktree is not renamed by ThinkRail.";
 		if (ws.renamed) return "Workspace: skipped — the user named it manually.";
-		const next = renameWorkspace(workspaceId, name, { lock: false });
+		const next = await renameAgentWorkspace(workspaceId, name);
 		const branch =
 			next.branch === ws.branch
 				? `branch "${ws.branch}" kept`
@@ -48,7 +48,7 @@ export async function applyAgentRename(
 ): Promise<string> {
 	const lines: string[] = [];
 	if (chatTitle !== undefined) lines.push(await renameChat(sessionId, workspaceId, chatTitle));
-	if (workspaceName !== undefined) lines.push(renameWorkspaceFor(workspaceId, workspaceName));
+	if (workspaceName !== undefined) lines.push(await renameWorkspaceFor(workspaceId, workspaceName));
 	return lines.join("\n");
 }
 

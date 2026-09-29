@@ -79,11 +79,15 @@ place as `kind: "external"` — outside the data dir, never created or mutated h
   `renameWorkspace` (**sync**; sets the sanitized, casing-preserved display `name`; `opts.lock` defaults
   `true` and sets `renamed: true`, marking the choice manual so the agentic `rename_session` tool never
   touches it again (manual is final; there is no unlock).
-  **`opts.renameBranch` defaults `true`** for the agentic caller (which passes `lock: false`, so the agent may
-  rename again): the branch is derived via `toBranch`, uniqued against refs + worktree dirs, and moved with
-  `git branch -m` **only while unpushed** — a branch with a configured upstream or a same-named
-  remote-tracking ref keeps its name (display name only), so its remote branch and PR stay intact — while
-  the **worktree dir never moves** (pi keys sessions and terminals/tabs by that exact cwd). The branch-moving
+  `renameAgentWorkspace(id, name)` is the **async agentic door**: it checks local upstream and
+  remote-tracking refs, then queries every configured remote with bounded, noninteractive `git ls-remote`
+  to detect published branches even under narrow fetch refspecs. A failed or timed-out remote check is
+  treated as potentially published: the display name changes, but the branch stays put. After awaiting,
+  it rechecks the manual-name lock and branch identity before delegating to `renameWorkspace` with
+  `{ lock: false, renameBranch: !published }`; a concurrent branch change also keeps the branch put.
+  The agent may rename again later. `opts.renameBranch` defaults `true` for direct callers; the branch
+  is derived via `toBranch`, uniqued against refs + worktree dirs, and moved with `git branch -m` only
+  when allowed, while the **worktree dir never moves** (pi keys sessions and terminals/tabs by that exact cwd). The branch-moving
   path re-points sibling records whose `baseBranch` or `diffBase` named the old branch, re-loads the registry
   after the Git subprocess so a concurrent removal is not resurrected, saves once, and emits `updated` for
   every changed record. The manual wire method instead passes
@@ -209,7 +213,8 @@ place as `kind: "external"` — outside the data dir, never created or mutated h
 - **Public surface (barrel):** `createWorkspace`, `listExistingWorktrees`, `openExistingWorktree`,
   `listWorkspaces`, `listWorkspaceRecords`, `listAllWorkspaceRecords`, `forgetWorkspace`,
   `reclaimWorktree`, `removeWorkspace`,
-  `workspaceDiffStats`, `workspaceDiffKey`, `getWorkspace`, `renameWorkspace`, `refreshUserOwnedWorkspace`,
+  `workspaceDiffStats`, `workspaceDiffKey`, `getWorkspace`, `renameWorkspace`, `renameAgentWorkspace`,
+  `refreshUserOwnedWorkspace`,
   `completeInitialTerminalReservation`, `ensureWorkspaceScratchDir`, `setWorkspacePublisher`,
   `WorkspaceLifecycleEvent`, `setWorkspaceDiffBase`, `setWorkspaceSkillOverride`,
   `setWorkspaceSubagentsOverride`.

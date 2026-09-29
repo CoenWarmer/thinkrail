@@ -303,8 +303,9 @@ channel fan-out, and the process-boot wrapper both launchers share.
   each requested target independently and reports each as renamed or skipped with a reason: `chatTitle` →
   `renameSession(..., "agent")` (skipped when the chat carries a manual-title marker);
   `workspaceName` → skipped for a `renamed` (manual/user-named), Default, or external workspace, else
-  `renameWorkspace(id, name, { lock: false })` (the workspaces module keeps a pushed branch in place, so
-  the result may report the display name renamed but the branch kept). An agentic rename never locks, so the agent may rename again as focus shifts. Invalid names
+  `renameAgentWorkspace(id, name)` (workspaces checks all configured remotes asynchronously, preserving a
+  published branch — or one whose publication cannot be verified — while updating the display name).
+  An agentic rename never locks, so the agent may rename again as focus shifts. Invalid names
   surface as a skip, not a thrown tool error. There is **no programmatic naming**: no prompt-commit,
   settled-turn, or first-send hook renames anything;
   - The **workspace-archive teardown** — the other composition of `agent` + `terminal` + `workspaces` only

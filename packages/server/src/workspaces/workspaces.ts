@@ -387,6 +387,39 @@ function isBranchPushed(repo: string, branch: string): boolean {
 	return remote.ok && remote.out.trim() !== "";
 }
 
+async function isBranchPublished(repo: string, branch: string): Promise<boolean> {
+	if (isBranchPushed(repo, branch)) return true;
+	const listed = await gitAsync(repo, ["remote"], { timeoutMs: 8_000 });
+	if (!listed.ok) return true;
+	const remotes = listed.out.split("\n").filter(Boolean);
+	const results = await Promise.all(
+		remotes.map((remote) =>
+			gitAsync(repo, ["ls-remote", "--heads", remote, `refs/heads/${branch}`], {
+				network: true,
+				timeoutMs: 8_000,
+			}),
+		),
+	);
+	return results.some(
+		(result) =>
+			!result.ok || result.out.split("\n").some((line) => line.endsWith(`\trefs/heads/${branch}`)),
+	);
+}
+
+export async function renameAgentWorkspace(id: string, name: string): Promise<Workspace> {
+	const ws = getWorkspace(id);
+	if (ws.renamed) throw new Error("The user named this workspace manually");
+	const project = getProjects().find((candidate) => candidate.id === ws.projectId);
+	if (!project) throw new Error(`Unknown project: ${ws.projectId}`);
+	const published = await isBranchPublished(project.path, ws.branch);
+	const fresh = getWorkspace(id);
+	if (fresh.renamed) throw new Error("The user named this workspace manually");
+	return renameWorkspace(id, name, {
+		lock: false,
+		renameBranch: !published && fresh.branch === ws.branch,
+	});
+}
+
 export function renameWorkspace(
 	id: string,
 	requestedName: string,

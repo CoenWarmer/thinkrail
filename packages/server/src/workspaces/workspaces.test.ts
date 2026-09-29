@@ -24,6 +24,7 @@ import {
 	reclaimWorktree,
 	refreshUserOwnedWorkspace,
 	removeWorkspace,
+	renameAgentWorkspace,
 	renameWorkspace,
 	setWorkspaceDiffBase,
 	setWorkspacePublisher,
@@ -440,6 +441,36 @@ test("renameWorkspace keeps a pushed branch (remote-tracking ref or upstream) an
 	const keptByUpstream = renameWorkspace(upstream.id, "Other Name", { lock: false });
 	expect(keptByUpstream).toMatchObject({ name: "Other Name", branch: upstream.branch });
 	expect(gitOut(upstream.worktreePath, "rev-parse", "--abbrev-ref", "HEAD")).toBe(upstream.branch);
+});
+
+test("agent rename keeps a pushed branch even when a narrow refspec hides its remote ref", async () => {
+	const origin = join(dataDir, "origin.git");
+	const backup = join(dataDir, "backup.git");
+	for (const path of [origin, backup]) {
+		mkdirSync(path);
+		git(path, "init", "--bare");
+	}
+	git(repo, "remote", "add", "-t", "main", "origin", origin);
+	git(repo, "remote", "add", "-t", "main", "backup", backup);
+	const ws = await createWorkspace("p1");
+	git(ws.worktreePath, "push", "backup", `${ws.branch}:refs/heads/${ws.branch}`);
+	const remoteRefs = gitOut(repo, "for-each-ref", "--format=%(refname)", "refs/remotes");
+	expect(remoteRefs).not.toContain(ws.branch);
+	expect(gitOut(repo, "config", "--get", `branch.${ws.branch}.remote`)).toBe("");
+
+	const renamed = await renameAgentWorkspace(ws.id, "New Display Name");
+	expect(renamed).toMatchObject({ name: "New Display Name", branch: ws.branch });
+	expect(renamed.renamed).toBeUndefined();
+	expect(gitOut(backup, "rev-parse", `refs/heads/${ws.branch}`)).toBe(
+		gitOut(ws.worktreePath, "rev-parse", "HEAD"),
+	);
+});
+
+test("agent rename keeps the branch when a remote cannot be checked", async () => {
+	git(repo, "remote", "add", "origin", join(dataDir, "missing.git"));
+	const ws = await createWorkspace("p1");
+	const renamed = await renameAgentWorkspace(ws.id, "Offline Display Name");
+	expect(renamed).toMatchObject({ name: "Offline Display Name", branch: ws.branch });
 });
 
 test("renameWorkspace with lock:false renames name + branch but leaves renamed unset (agentic)", async () => {

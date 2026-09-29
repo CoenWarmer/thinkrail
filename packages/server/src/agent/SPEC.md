@@ -766,7 +766,7 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
 ## Session titles
 
 `agentSessionManager` is the only durable chat-title writer. Its `renameSession(sessionId,
-workspaceId, cwd, title, { source })` validates one non-blank, single-line title within contracts'
+workspaceId, cwd, title, source)` validates one non-blank, single-line title within contracts'
 length limit, resolves the session strictly inside the supplied workspace/cwd, and avoids an append when the
 normalized title is already current. A live session writes through `AgentSession.setSessionName`; a disk-only
 session opens its exact transcript with `SessionManager.open(...).appendSessionInfo(...)` without attaching an

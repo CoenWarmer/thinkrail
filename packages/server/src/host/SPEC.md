@@ -301,7 +301,7 @@ channel fan-out, and the process-boot wrapper both launchers share.
   `rename_session` tool, installed via `setRenameSessionHandler` — the composition of `agent` +
   `workspaces` only the host may make). It resolves the calling session's workspace, then applies
   each requested target independently and reports each as renamed or skipped with a reason: `chatTitle` →
-  `renameSession(..., { source: "agent" })` (skipped when the chat carries a manual-title marker);
+  `renameSession(..., "agent")` (skipped when the chat carries a manual-title marker);
   `workspaceName` → skipped for a `renamed` (manual/user-named), Default, or external workspace, else
   `renameWorkspace(id, name, { lock: false })` (the workspaces module keeps a pushed branch in place, so
   the result may report the display name renamed but the branch kept). An agentic rename never locks, so the agent may rename again as focus shifts. Invalid names

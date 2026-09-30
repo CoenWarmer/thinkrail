@@ -67,6 +67,7 @@ export function Shell() {
 	const protocolVersion = useAppStore((s) => s.protocolVersion);
 	const updates = useUpdates(supportsHostUpdateRun(protocolVersion) ? runHostUpdate : null);
 	const [newWorkspaceProjectId, setNewWorkspaceProjectId] = useState<string | null>(null);
+	const projectsScrollTopRef = useRef(0);
 
 	const welcomeCenterRef = useRef<HTMLDivElement>(null);
 	const welcomeProjects = useCollapsibleRegion(welcomeCenterRef, "welcome-left");
@@ -238,7 +239,10 @@ export function Shell() {
 			</header>
 			{hasActiveWorkspace && activeWorkspaceId ? (
 				<div data-testid="workspace-shell-layout" className="h-full min-h-0 min-w-0">
-					<WorkspaceWorkbench workspaceId={activeWorkspaceId} />
+					<WorkspaceWorkbench
+						workspaceId={activeWorkspaceId}
+						projectsScrollTopRef={projectsScrollTopRef}
+					/>
 				</div>
 			) : (
 				<div
@@ -279,7 +283,11 @@ export function Shell() {
 								inert={welcomeProjects.collapsed ? true : undefined}
 								className="h-full bg-container-sidebar-bg outline-none"
 							>
-								<QuietScrollArea className="h-full" viewportClassName="p-12">
+								<QuietScrollArea
+									className="h-full"
+									viewportClassName="p-12"
+									scrollTopRef={projectsScrollTopRef}
+								>
 									<ProjectTree />
 								</QuietScrollArea>
 							</aside>

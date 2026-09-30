@@ -4,6 +4,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
 	createWorkspaceViaDialog,
 	defaultWorkspaceRow,
+	goProjectHome,
 	openAppFresh,
 	openFixtureProject,
 	stagePlainFolder,
@@ -241,6 +242,32 @@ test("rail expansion is per-browser view state that survives a reload", async ({
 	await expect(page.getByTestId("connection-status")).toHaveAttribute("data-status", "connected");
 	await expect(expand).toHaveAttribute("data-expanded", "false");
 	await expect(defaultWorkspaceRow(page)).toHaveCount(0);
+});
+
+test("the Projects rail keeps its scroll position when entering a workspace", async ({ page }) => {
+	await openFixtureProject(page);
+	await createWorkspaceViaDialog(page);
+	await createWorkspaceViaDialog(page);
+	await goProjectHome(page);
+	await page.setViewportSize({ width: 900, height: 180 });
+
+	const projectHomeViewport = page.getByTestId("left-nav").locator(".quiet-scroll-viewport");
+	await expect
+		.poll(() =>
+			projectHomeViewport.evaluate((viewport) => viewport.scrollHeight > viewport.clientHeight),
+		)
+		.toBe(true);
+	const target = worktreeRows(page).last();
+	const scrollTop = await projectHomeViewport.evaluate((viewport) => {
+		viewport.scrollTop = viewport.scrollHeight;
+		return viewport.scrollTop;
+	});
+	expect(scrollTop).toBeGreaterThan(0);
+
+	await target.getByRole("button").first().click();
+	await expect(target).toHaveAttribute("data-active", "true");
+	const workspaceViewport = page.getByTestId("left-nav").locator(".quiet-scroll-viewport");
+	await expect.poll(() => workspaceViewport.evaluate((viewport) => viewport.scrollTop)).toBe(scrollTop);
 });
 
 test("activating a workspace in one project keeps the other project's rail expansion", async ({

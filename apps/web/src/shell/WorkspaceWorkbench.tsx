@@ -215,7 +215,13 @@ function useTerminalReservation(workspaceId: string): void {
 	}, [connectionGeneration, pendingIntent, status, workspaceId]);
 }
 
-export function WorkspaceWorkbench({ workspaceId }: { workspaceId: string }) {
+export function WorkspaceWorkbench({
+	workspaceId,
+	projectsScrollTopRef,
+}: {
+	workspaceId: string;
+	projectsScrollTopRef: { current: number };
+}) {
 	const status = useAppStore((state) => state.status);
 	const connectionGeneration = useAppStore((state) => state.connectionGeneration);
 	const canRenameChat = useAppStore(selectCanRenameChat);
@@ -521,7 +527,12 @@ export function WorkspaceWorkbench({ workspaceId }: { workspaceId: string }) {
 			switch (tool) {
 				case "projects":
 					body = (
-						<QuietScrollArea data-testid="left-nav" className="h-full" viewportClassName="p-12">
+						<QuietScrollArea
+							data-testid="left-nav"
+							className="h-full"
+							viewportClassName="p-12"
+							scrollTopRef={projectsScrollTopRef}
+						>
 							<ProjectTree />
 						</QuietScrollArea>
 					);
@@ -553,7 +564,7 @@ export function WorkspaceWorkbench({ workspaceId }: { workspaceId: string }) {
 				</ErrorBoundary>
 			);
 		},
-		[review.failed, specs.failed, specs.reload, workspaceId],
+		[projectsScrollTopRef, review.failed, specs.failed, specs.reload, workspaceId],
 	);
 
 	const isDefault = workspace != null && isDefaultWorkspace(workspace);

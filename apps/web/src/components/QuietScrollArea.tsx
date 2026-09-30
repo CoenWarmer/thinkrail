@@ -1,4 +1,11 @@
-import { type ComponentPropsWithoutRef, type ReactNode, useEffect, useState } from "react";
+import {
+	type ComponentPropsWithoutRef,
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { cn } from "@/lib";
 
 type QuietScrollAxis = "vertical" | "both";
@@ -232,6 +239,7 @@ interface QuietScrollAreaProps extends Omit<ComponentPropsWithoutRef<"div">, "ch
 	children: ReactNode;
 	viewportClassName?: string | undefined;
 	viewportTestId?: string | undefined;
+	scrollTopRef?: { current: number } | undefined;
 	surface?: QuietScrollSurface | undefined;
 	axis?: QuietScrollAxis | undefined;
 }
@@ -241,12 +249,24 @@ export function QuietScrollArea({
 	className,
 	viewportClassName,
 	viewportTestId,
+	scrollTopRef,
 	surface = "sidebar",
 	axis = "vertical",
 	...props
 }: QuietScrollAreaProps) {
 	const [root, setRoot] = useState<HTMLDivElement | null>(null);
 	const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
+	const viewportRef = useRef<HTMLDivElement | null>(null);
+	const attachViewport = useCallback(
+		(element: HTMLDivElement | null) => {
+			const previous = viewportRef.current;
+			if (previous && scrollTopRef) scrollTopRef.current = previous.scrollTop;
+			viewportRef.current = element;
+			if (element && scrollTopRef) element.scrollTop = scrollTopRef.current;
+			setViewport(element);
+		},
+		[scrollTopRef],
+	);
 	return (
 		<div
 			ref={setRoot}
@@ -255,7 +275,7 @@ export function QuietScrollArea({
 			{...props}
 		>
 			<div
-				ref={setViewport}
+				ref={attachViewport}
 				data-testid={viewportTestId}
 				className={cn("quiet-scroll-viewport size-full overflow-auto", viewportClassName)}
 			>

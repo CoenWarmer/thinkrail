@@ -5,28 +5,31 @@ export const RENAME_SESSION_TOOL_NAME = "rename_session";
 
 export const RenameSessionSchema = Type.Object({
 	chatTitle: Type.Optional(
-		Type.String({ description: "New title for this chat (3–6 words, at most 80 characters)." }),
+		Type.String({
+			description: "Short, descriptive title for this chat (2–5 words, at most 80 characters).",
+		}),
 	),
 	workspaceName: Type.Optional(
 		Type.String({
 			description:
-				"New name for this chat's workspace (≤5 words); its git branch is renamed to match while unpushed.",
+				"Short, descriptive name for this chat's workspace (2–5 words; for a pull-request review, '#<number> <PR title>'). Its git branch is renamed to match while unpushed.",
 		}),
 	),
 });
 
 export type RenameSessionParams = Static<typeof RenameSessionSchema>;
 
-const DESCRIPTION = `Rename this chat, its workspace (and the workspace's git branch), or both, so the names say what this session is actually for. Pass chatTitle, workspaceName, or both. The result reports each target as renamed or skipped; a target the user named manually is never renamed again.`;
+const DESCRIPTION = `Name this chat, its workspace (and the workspace's git branch), or both, so the names say what this session is for. Pass chatTitle, workspaceName, or both. The result reports each target as renamed or skipped and says whether further renames are allowed; a target the user named manually is never renamed.`;
 
 const PROMPT_SNIPPET =
-	"rename_session: name this chat and its workspace after what the session is for; keep them relevant.";
+	"rename_session: give this chat and its workspace a short, descriptive name once you understand the task.";
 
 const PROMPT_GUIDELINES = [
-	"On the first turn, once you know the session's purpose, call rename_session with both chatTitle and workspaceName before replying — including for short answers — unless the user explicitly forbids tools or limits you to specific tools. Their tool restrictions take precedence over naming.",
-	"Later, call rename_session again only when the session's focus materially changes, so the names stay relevant to what is really happening.",
-	"Names are short and outcome-focused (e.g. 'Fix login redirect'), never the raw prompt or tool/process wording. Rename silently — do not mention it to the user.",
-	"If rename_session reports a target skipped because the user named it manually, accept it and do not retry.",
+	"On the first turn, once you know the session's purpose, call rename_session once with both chatTitle and workspaceName before replying — including for short answers — unless the user explicitly forbids tools or limits you to specific tools. Their tool restrictions take precedence over naming.",
+	"Names are short and descriptive: 2–5 words naming the outcome (e.g. 'Fix login redirect'), never the raw prompt or tool/process wording. Rename silently — do not mention it to the user.",
+	"When the session reviews a pull request, set workspaceName to the PR number and title, e.g. '#565 Agent-driven naming' — shorten a long title.",
+	"Do not call rename_session again unless its last result said further renames are allowed; then call it only when the session's focus materially changes.",
+	"If rename_session reports a target skipped, accept it and do not retry.",
 ];
 
 export type RenameSessionHandler = (

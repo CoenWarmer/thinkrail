@@ -1804,6 +1804,28 @@ test("a manual title locks the chat against agentic renames, and the lock is dur
 	removeSession(session.sessionId);
 });
 
+test("an agentic write in once mode never replaces an existing chat name", async () => {
+	const cwd = tmpCwd("trpi-rename-once-");
+	const session = await createSession({
+		cwd,
+		workspaceId: "ws-rename-once",
+		model: toWireModel(fauxA.getModel()),
+	});
+	const rename = (title: string) =>
+		renameSession(session.sessionId, "ws-rename-once", cwd, title, "agent", { once: true });
+	expect(await rename("First name")).toBe("renamed");
+	expect(await rename("Second name")).toBe("named");
+	expect(
+		await renameSession(session.sessionId, "ws-rename-once", cwd, "Continuous name", "agent"),
+	).toBe("renamed");
+	expect(
+		(await listSessions("ws-rename-once", cwd)).find(
+			(candidate) => candidate.sessionId === session.sessionId,
+		)?.title,
+	).toBe("Continuous name");
+	removeSession(session.sessionId);
+});
+
 test("renameSession updates a disk-only transcript without attaching an agent", async () => {
 	const cwd = tmpCwd("trpi-rename-disk-");
 	const { id, path } = writeFixtureSession(

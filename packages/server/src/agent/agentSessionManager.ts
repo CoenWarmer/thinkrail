@@ -907,7 +907,11 @@ function serializeSessionFileOperation<T>(
 export const MANUAL_TITLE_CUSTOM_TYPE = "thinkrail.manual-title";
 
 export type RenameSource = "manual" | "agent";
-export type RenameSessionResult = "renamed" | "unchanged" | "locked";
+export type RenameSessionResult = "renamed" | "unchanged" | "locked" | "named";
+
+export interface RenameSessionOptions {
+	once?: boolean;
+}
 
 function hasManualTitle(manager: SessionManager): boolean {
 	return manager
@@ -920,10 +924,12 @@ function applyTitle(
 	current: string | undefined,
 	title: string,
 	source: RenameSource,
+	once: boolean,
 	write: () => void,
 ): RenameSessionResult {
 	const locked = hasManualTitle(manager);
 	if (source === "agent" && locked) return "locked";
+	if (source === "agent" && once && current !== undefined) return "named";
 	if (source === "manual" && !locked) manager.appendCustomEntry(MANUAL_TITLE_CUSTOM_TYPE);
 	if (current === title) return "unchanged";
 	write();
@@ -936,6 +942,7 @@ export function renameSession(
 	cwd: string,
 	title: string,
 	source: RenameSource,
+	{ once = false }: RenameSessionOptions = {},
 ): Promise<RenameSessionResult> {
 	const normalized = normalizeSessionTitle(title);
 	if (!normalized) return Promise.reject(new Error("Invalid session title"));
@@ -945,7 +952,7 @@ export function renameSession(
 		if (live) {
 			if (live.workspaceId !== workspaceId) throw new Error(`Unknown session: ${sessionId}`);
 			const { session } = live;
-			return applyTitle(session.sessionManager, session.sessionName, normalized, source, () =>
+			return applyTitle(session.sessionManager, session.sessionName, normalized, source, once, () =>
 				session.setSessionName(normalized),
 			);
 		}
@@ -957,7 +964,7 @@ export function renameSession(
 			throw new Error(`Unknown session: ${sessionId}`);
 		}
 		const manager = SessionManager.open(info.path);
-		return applyTitle(manager, manager.getSessionName(), normalized, source, () => {
+		return applyTitle(manager, manager.getSessionName(), normalized, source, once, () => {
 			manager.appendSessionInfo(normalized);
 			publish({ sessionId, event: { type: "session_info_changed", name: normalized } });
 		});

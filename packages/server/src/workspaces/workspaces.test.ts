@@ -466,6 +466,21 @@ test("agent rename keeps a pushed branch even when a narrow refspec hides its re
 	);
 });
 
+test("agent rename in once mode renames only a pristine workspace-N", async () => {
+	const ws = await createWorkspace("p1");
+	const first = await renameAgentWorkspace(ws.id, "Login Flow", { once: true });
+	expect(first).toMatchObject({ name: "Login Flow", branch: "login-flow" });
+	await expect(renameAgentWorkspace(ws.id, "Other Name", { once: true })).rejects.toThrow(
+		"This workspace is already named",
+	);
+	expect((await renameAgentWorkspace(ws.id, "Other Name")).name).toBe("Other Name");
+
+	const named = await createWorkspace("p1", "User Named");
+	await expect(renameAgentWorkspace(named.id, "Agent Name", { once: true })).rejects.toThrow(
+		"The user named this workspace manually",
+	);
+});
+
 test("agent rename keeps the branch when a remote cannot be checked", async () => {
 	git(repo, "remote", "add", "origin", join(dataDir, "missing.git"));
 	const ws = await createWorkspace("p1");

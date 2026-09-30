@@ -17,12 +17,13 @@ test("renameSessionExtension always registers the tool", () => {
 	expect(registered).toEqual([RENAME_SESSION_TOOL_NAME]);
 });
 
-test("tool guidance asks for both names on the first turn and retitles only when focus changes", () => {
+test("tool guidance names once, short and descriptive, with PR reviews named by number and title", () => {
 	const tool = createRenameSessionTool();
 	const guidance = [tool.promptSnippet, ...(tool.promptGuidelines ?? [])].join(" ");
-	expect(guidance).toContain("On the first turn");
-	expect(guidance).toContain("both chatTitle and workspaceName");
-	expect(guidance).toContain("focus materially changes");
+	expect(guidance).toContain("call rename_session once with both chatTitle and workspaceName");
+	expect(guidance).toContain("short and descriptive");
+	expect(guidance).toContain("PR number and title, e.g. '#565 Agent-driven naming'");
+	expect(guidance).toContain("unless its last result said further renames are allowed");
 	expect(guidance).toContain("tool restrictions take precedence");
 });
 

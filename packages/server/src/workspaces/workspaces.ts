@@ -406,14 +406,27 @@ async function isBranchPublished(repo: string, branch: string): Promise<boolean>
 	);
 }
 
-export async function renameAgentWorkspace(id: string, name: string): Promise<Workspace> {
-	const ws = getWorkspace(id);
+const AUTO_WORKSPACE_NAME = /^workspace-\d+$/;
+
+function assertAgentMayRename(ws: Workspace, once: boolean): void {
 	if (ws.renamed) throw new Error("The user named this workspace manually");
+	if (once && !(ws.name === ws.branch && AUTO_WORKSPACE_NAME.test(ws.branch))) {
+		throw new Error("This workspace is already named");
+	}
+}
+
+export async function renameAgentWorkspace(
+	id: string,
+	name: string,
+	{ once = false }: { once?: boolean } = {},
+): Promise<Workspace> {
+	const ws = getWorkspace(id);
+	assertAgentMayRename(ws, once);
 	const project = getProjects().find((candidate) => candidate.id === ws.projectId);
 	if (!project) throw new Error(`Unknown project: ${ws.projectId}`);
 	const published = await isBranchPublished(project.path, ws.branch);
 	const fresh = getWorkspace(id);
-	if (fresh.renamed) throw new Error("The user named this workspace manually");
+	assertAgentMayRename(fresh, once);
 	return renameWorkspace(id, name, {
 		lock: false,
 		renameBranch: !published && fresh.branch === ws.branch,

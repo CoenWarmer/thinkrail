@@ -1,6 +1,14 @@
 export { type ActivityInputs, deriveActivityStatus } from "./activity";
 export * from "./agentSessionManager";
 export * from "./askUserQuestion";
+export {
+	getSessionResources,
+	readBackgroundCommandOutput,
+	setSessionResourcesPublisher,
+	stopAllSubagents,
+	stopBackgroundCommand,
+	stopSubagent,
+} from "./chatResources";
 export { type ReviewSubagentRun, readChildTranscript, runReviewSubagent } from "./delegation";
 export {
 	type BundledExtensionFactory,
@@ -31,6 +39,7 @@ export {
 	requestReviewExtension,
 	setRequestReviewHandler,
 } from "./requestReviewTool";
+export { isHostResourceId, isPiSessionId } from "./resourceIdentity";
 export {
 	RESOLVE_COMMENT_TOOL_NAME,
 	type ResolveCommentOutcome,

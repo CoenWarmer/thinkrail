@@ -309,7 +309,8 @@ channel fan-out, and the process-boot wrapper both launchers share.
   external workspace, else
   `renameAgentWorkspace(id, name, { once })` (workspaces checks all configured remotes asynchronously, preserving a
   published branch — or one whose publication cannot be verified — while updating the display name).
-  An agentic rename never locks, so the agent may rename again as focus shifts. Invalid names
+  An agentic rename never sets the manual lock; a later agentic rename is allowed only while
+  `agentRenameContinuous` is on. Invalid names
   surface as a skip, not a thrown tool error. There is **no programmatic naming**: no prompt-commit,
   settled-turn, or first-send hook renames anything;
   - The **workspace-archive teardown** — the other composition of `agent` + `terminal` + `workspaces` only

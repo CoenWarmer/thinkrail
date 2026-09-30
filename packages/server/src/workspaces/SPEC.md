@@ -87,7 +87,8 @@ place as `kind: "external"` — outside the data dir, never created or mutated h
   treated as potentially published: the display name changes, but the branch stays put. After awaiting,
   it rechecks the manual-name lock, once-mode pristineness, and branch identity before delegating to `renameWorkspace` with
   `{ lock: false, renameBranch: !published }`; a concurrent branch change also keeps the branch put.
-  The agent may rename again later. `opts.renameBranch` defaults `true` for direct callers; the branch
+  Because the agentic rename never sets the manual lock, a later agentic rename is possible only in
+  continuous mode (`once: false`). `opts.renameBranch` defaults `true` for direct callers; the branch
   is derived via `toBranch`, uniqued against refs + worktree dirs, and moved with `git branch -m` only
   when allowed, while the **worktree dir never moves** (pi keys sessions and terminals/tabs by that exact cwd). The branch-moving
   path re-points sibling records whose `baseBranch` or `diffBase` named the old branch, re-loads the registry

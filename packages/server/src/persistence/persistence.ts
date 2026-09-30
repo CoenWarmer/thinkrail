@@ -133,6 +133,10 @@ export function loadConfig(): AppConfig {
 			typeof value.subagentsEnabled === "boolean"
 				? value.subagentsEnabled
 				: DEFAULT_CONFIG.subagentsEnabled,
+		agentRenameContinuous:
+			typeof value.agentRenameContinuous === "boolean"
+				? value.agentRenameContinuous
+				: DEFAULT_CONFIG.agentRenameContinuous,
 		jbcentralQuotaEnabled:
 			typeof value.jbcentralQuotaEnabled === "boolean"
 				? value.jbcentralQuotaEnabled

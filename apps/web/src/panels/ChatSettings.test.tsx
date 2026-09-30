@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 import {
+	AGENT_RENAME_SETTING_PROTOCOL_VERSION,
 	SUBAGENT_SETTINGS_PROTOCOL_VERSION,
 	type SubagentOverride,
 	type Workspace,
 } from "@thinkrail/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ChatSettings, SubagentSettings } from "./ChatSettings";
+import { AgentRenameSettings, ChatSettings, SubagentSettings } from "./ChatSettings";
 
 test("Chat settings renders one two-handle streaming movement control", () => {
 	const markup = renderToStaticMarkup(<ChatSettings />);
@@ -85,4 +86,30 @@ test("an active workspace shows its named three-state override", () => {
 	expect(markup).toContain('data-testid="subagents-workspace-on"');
 	expect(markup).toContain('data-testid="subagents-workspace-off"');
 	expect(markup).toContain('data-testid="subagents-workspace-off" data-active="true"');
+});
+
+function renderRename(protocolVersion: number | null, continuous: boolean): string {
+	return renderToStaticMarkup(
+		<AgentRenameSettings
+			protocolVersion={protocolVersion}
+			continuous={continuous}
+			onChange={() => {}}
+		/>,
+	);
+}
+
+test("the naming switch stays hidden against hosts older than its protocol", () => {
+	expect(renderRename(AGENT_RENAME_SETTING_PROTOCOL_VERSION - 1, false)).toBe("");
+	expect(renderRename(null, false)).toBe("");
+});
+
+test("the naming switch defaults to naming once and reports continuous mode when on", () => {
+	const off = renderRename(AGENT_RENAME_SETTING_PROTOCOL_VERSION, false);
+	expect(off).toContain("Chat &amp; workspace naming");
+	expect(off).toContain('data-testid="agent-rename-continuous-toggle"');
+	expect(off).toContain("the agent names each chat and workspace once");
+	expect(off).toContain('aria-checked="false"');
+	const on = renderRename(AGENT_RENAME_SETTING_PROTOCOL_VERSION, true);
+	expect(on).toContain("renames a chat or workspace again when its focus changes");
+	expect(on).toContain('aria-checked="true"');
 });

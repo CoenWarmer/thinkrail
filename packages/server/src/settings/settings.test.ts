@@ -315,6 +315,18 @@ test("agentReviewEnabled defaults on; an old config loads the default; toggling 
 	expect(() => updateConfig(invalid)).toThrow("agentReviewEnabled must be a boolean");
 });
 
+test("agentRenameContinuous defaults off; an old config loads the default; toggling on round-trips; non-boolean rejected", () => {
+	expect(DEFAULT_CONFIG.agentRenameContinuous).toBe(false);
+	writeFileSync(join(dataDir, "config.json"), JSON.stringify({ theme: "dark" }));
+	resetConfigCache();
+	expect(getConfig().agentRenameContinuous).toBe(false);
+	expect(updateConfig({ agentRenameContinuous: true }).agentRenameContinuous).toBe(true);
+	resetConfigCache();
+	expect(getConfig().agentRenameContinuous).toBe(true);
+	const invalid = { agentRenameContinuous: "yes" } as unknown as AppConfigUpdate;
+	expect(() => updateConfig(invalid)).toThrow("agentRenameContinuous must be a boolean");
+});
+
 test("subagents default on; an old config inherits that default; toggling off round-trips", () => {
 	expect(DEFAULT_CONFIG.subagentsEnabled).toBe(true);
 	writeFileSync(join(dataDir, "config.json"), JSON.stringify({ theme: "dark" }));

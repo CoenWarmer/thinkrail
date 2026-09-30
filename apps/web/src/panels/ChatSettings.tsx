@@ -1,4 +1,5 @@
 import {
+	AGENT_RENAME_SETTING_PROTOCOL_VERSION,
 	type AppConfigUpdate,
 	type ComposerGrowthLimit,
 	SUBAGENT_SETTINGS_PROTOCOL_VERSION,
@@ -245,12 +246,57 @@ export function SubagentSettings({
 	);
 }
 
+export function AgentRenameSettings({
+	protocolVersion,
+	continuous,
+	onChange,
+}: {
+	protocolVersion: number | null;
+	continuous: boolean;
+	onChange: (continuous: boolean) => void;
+}) {
+	if (protocolVersion === null || protocolVersion < AGENT_RENAME_SETTING_PROTOCOL_VERSION) {
+		return null;
+	}
+	return (
+		<div
+			data-testid="settings-agent-rename"
+			className="flex flex-col gap-8 border-border-default border-t pt-16"
+		>
+			<div className="flex flex-col gap-4">
+				<h3 className="tr-title-section text-text-default">Chat & workspace naming</h3>
+				<p className="text-text-muted tr-text-metadata">
+					The agent gives each new chat and workspace a short, descriptive name. Names you set
+					yourself are never changed.
+				</p>
+			</div>
+			<div className="flex items-center justify-between gap-12 rounded-[var(--radius-sm)] border border-border-default bg-control-bg px-12 py-8">
+				<div className="flex flex-col gap-2">
+					<span className="tr-title-compact text-text-default">Keep names up to date</span>
+					<span className="text-text-muted tr-text-metadata">
+						{continuous
+							? "On — the agent renames a chat or workspace again when its focus changes."
+							: "Off — the agent names each chat and workspace once."}
+					</span>
+				</div>
+				<SettingsSwitch
+					checked={continuous}
+					label="Keep chat and workspace names up to date"
+					testId="agent-rename-continuous-toggle"
+					onChange={onChange}
+				/>
+			</div>
+		</div>
+	);
+}
+
 export function ChatSettings() {
 	const messageOrder = useAppStore((state) => state.chatMessageOrder);
 	const growthLimit = useAppStore((state) => state.composerGrowthLimit);
 	const streamingResponseMovement = useAppStore((state) => state.streamingResponseMovement);
 	const protocolVersion = useAppStore((state) => state.protocolVersion);
 	const subagentsEnabled = useAppStore((state) => state.subagentsEnabled);
+	const agentRenameContinuous = useAppStore((state) => state.agentRenameContinuous);
 	const activeWorkspace = useAppStore(selectActiveWorkspace);
 	const setChatMessageOrder = useAppStore((state) => state.setChatMessageOrder);
 	const setStreamingResponseMovement = useAppStore((state) => state.setStreamingResponseMovement);
@@ -335,6 +381,14 @@ export function ChatSettings() {
 					saveSetting({ subagentsEnabled: enabled }, "Couldn't change the global subagent default")
 				}
 				onWorkspaceChange={selectWorkspaceSubagents}
+			/>
+
+			<AgentRenameSettings
+				protocolVersion={protocolVersion}
+				continuous={agentRenameContinuous}
+				onChange={(continuous) =>
+					saveSetting({ agentRenameContinuous: continuous }, "Couldn't change chat naming")
+				}
 			/>
 		</section>
 	);

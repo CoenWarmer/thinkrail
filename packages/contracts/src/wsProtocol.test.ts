@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ReviewFixDetails } from "./domain";
 import {
 	ACTIVITY_PROTOCOL_VERSION,
+	AGENT_RENAME_SETTING_PROTOCOL_VERSION,
 	AGENT_REVIEW_SETTING_PROTOCOL_VERSION,
 	ANALYTICS_CONSENT_PROTOCOL_VERSION,
 	customMessageText,
@@ -90,6 +91,11 @@ test("the plan-review subagent reshapes the review wire and advances the protoco
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(PLAN_REVIEW_SUBAGENT_PROTOCOL_VERSION);
 	expect(WS_CHANNELS.reviewChanged).toBe("review.changed");
 	expect(WS_CHANNELS.reviewFailed).toBe("review.failed");
+});
+
+test("the agent-rename setting advances the protocol to v71", () => {
+	expect(AGENT_RENAME_SETTING_PROTOCOL_VERSION).toBe(71);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(AGENT_RENAME_SETTING_PROTOCOL_VERSION);
 });
 
 test("the agent-review setting advances the protocol to v68", () => {

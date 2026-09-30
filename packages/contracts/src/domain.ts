@@ -532,6 +532,8 @@ export interface AppConfig extends ThemePreference {
 	/** When false, the worker's in-session `request_review` tool is withheld; the Review button still works. */
 	agentReviewEnabled: boolean;
 	subagentsEnabled: boolean;
+	/** When false (default), the agent's rename_session tool names each chat/workspace only once. */
+	agentRenameContinuous: boolean;
 	jbcentralQuotaEnabled: boolean;
 	jbcentralQuotaRefreshSeconds: number;
 	/** Which shell new workspace terminals start on Windows; ignored on other platforms. */
@@ -582,6 +584,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 	reviewAutoFix: true,
 	agentReviewEnabled: true,
 	subagentsEnabled: true,
+	agentRenameContinuous: false,
 	jbcentralQuotaEnabled: true,
 	jbcentralQuotaRefreshSeconds: JBCENTRAL_QUOTA_REFRESH_SECONDS.default,
 };

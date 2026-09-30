@@ -3323,6 +3323,14 @@ test("applyConfig projects the host-wide subagent default", () => {
 	expect(useAppStore.getState()).toHaveProperty("subagentsEnabled", true);
 });
 
+test("applyConfig projects the continuous-rename setting and defaults an old host to naming once", () => {
+	useAppStore.getState().applyConfig({ ...DEFAULT_CONFIG, agentRenameContinuous: true });
+	expect(useAppStore.getState()).toHaveProperty("agentRenameContinuous", true);
+	const { agentRenameContinuous: _omitted, ...olderHost } = DEFAULT_CONFIG;
+	useAppStore.getState().applyConfig(olderHost as typeof DEFAULT_CONFIG);
+	expect(useAppStore.getState()).toHaveProperty("agentRenameContinuous", false);
+});
+
 test("applyConfig projects JetBrains quota display and cadence", () => {
 	expect(useAppStore.getState()).toMatchObject({
 		jbcentralQuotaEnabled: true,

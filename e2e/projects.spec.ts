@@ -267,7 +267,9 @@ test("the Projects rail keeps its scroll position when entering a workspace", as
 	await target.getByRole("button").first().click();
 	await expect(target).toHaveAttribute("data-active", "true");
 	const workspaceViewport = page.getByTestId("left-nav").locator(".quiet-scroll-viewport");
-	await expect.poll(() => workspaceViewport.evaluate((viewport) => viewport.scrollTop)).toBe(scrollTop);
+	await expect
+		.poll(() => workspaceViewport.evaluate((viewport) => viewport.scrollTop))
+		.toBe(scrollTop);
 });
 
 test("activating a workspace in one project keeps the other project's rail expansion", async ({

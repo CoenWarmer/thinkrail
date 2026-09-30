@@ -19,7 +19,7 @@ export const RenameSessionSchema = Type.Object({
 
 export type RenameSessionParams = Static<typeof RenameSessionSchema>;
 
-const DESCRIPTION = `Name this chat, its workspace (and the workspace's git branch), or both, so the names say what this session is for. Pass chatTitle, workspaceName, or both. The result reports each target as renamed or skipped and says whether further renames are allowed; a target the user named manually is never renamed.`;
+const DESCRIPTION = `Name this chat, its workspace (and the workspace's git branch), or both, so the names say what this session is for. Pass chatTitle, workspaceName, or both. The result reports each target as renamed or skipped and notes whether the user's setting currently allows renaming named targets again; a target the user named manually is never renamed.`;
 
 const PROMPT_SNIPPET =
 	"rename_session: give this chat and its workspace a short, descriptive name once you understand the task.";
@@ -28,8 +28,9 @@ const PROMPT_GUIDELINES = [
 	"On the first turn, once you know the session's purpose, call rename_session once with both chatTitle and workspaceName before replying — including for short answers — unless the user explicitly forbids tools or limits you to specific tools. Their tool restrictions take precedence over naming.",
 	"Names are short and descriptive: 2–5 words naming the outcome (e.g. 'Fix login redirect'), never the raw prompt or tool/process wording. Rename silently — do not mention it to the user.",
 	"When the session reviews a pull request, set workspaceName to the PR number and title, e.g. '#565 Agent-driven naming' — shorten a long title.",
-	"Do not call rename_session again unless its last result said further renames are allowed; then call it only when the session's focus materially changes.",
-	"If rename_session reports a target skipped, accept it and do not retry.",
+	"If a target was not named yet (you passed only one of chatTitle and workspaceName), you may name it later once its purpose is clear.",
+	"Call rename_session again for an already-named target only when the session's focus materially changes; the host applies the user's current naming setting and skips the rename when renaming again is off.",
+	"If rename_session reports a target skipped, accept it and do not retry until the session's focus materially changes again.",
 ];
 
 export type RenameSessionHandler = (

@@ -302,8 +302,9 @@ channel fan-out, and the process-boot wrapper both launchers share.
   `workspaces` only the host may make). It resolves the calling session's workspace, then applies
   each requested target independently and reports each as renamed or skipped with a reason. It reads
   `settings.agentRenameContinuous` per call: off (the default) passes **once** mode, so a target the agent
-  or user already named is skipped and the result tells the agent the names are final; on, it tells the
-  agent it may rename again when the session's focus materially changes. `chatTitle` →
+  or user already named is skipped while a still-unnamed target (e.g. one omitted from the first call) can
+  be named. Each result ends with a note describing the current setting, never a permanent "final" claim,
+  so enabling the setting later takes effect on the agent's next focus-change call. `chatTitle` →
   `renameSession(..., "agent", { once })` (skipped when the chat carries a manual-title marker, or in once
   mode when it has any name); `workspaceName` → skipped for a `renamed` (manual/user-named), Default, or
   external workspace, else

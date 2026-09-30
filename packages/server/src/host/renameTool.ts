@@ -7,9 +7,10 @@ import {
 import { getConfig } from "../settings";
 import { getWorkspace, renameAgentWorkspace } from "../workspaces";
 
-const ONCE_NOTE = "These names are final: do not call rename_session again in this session.";
+const ONCE_NOTE =
+	"Renaming again is currently off in the user's settings: named targets keep their names; an unnamed target can still be named.";
 const CONTINUOUS_NOTE =
-	"Further renames are allowed: call rename_session again only if the session's focus materially changes.";
+	"Renaming again is currently on in the user's settings: rename again only when the session's focus materially changes.";
 
 function errorText(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);

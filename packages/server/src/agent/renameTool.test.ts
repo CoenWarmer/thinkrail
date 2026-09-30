@@ -23,7 +23,9 @@ test("tool guidance names once, short and descriptive, with PR reviews named by 
 	expect(guidance).toContain("call rename_session once with both chatTitle and workspaceName");
 	expect(guidance).toContain("short and descriptive");
 	expect(guidance).toContain("PR number and title, e.g. '#565 Agent-driven naming'");
-	expect(guidance).toContain("unless its last result said further renames are allowed");
+	expect(guidance).toContain("you may name it later once its purpose is clear");
+	expect(guidance).toContain("host applies the user's current naming setting");
+	expect(guidance).not.toContain("last result said");
 	expect(guidance).toContain("tool restrictions take precedence");
 });
 

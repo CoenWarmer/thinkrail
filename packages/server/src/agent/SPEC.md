@@ -573,8 +573,10 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
     The `rename_session` tool (`renameTool.ts`) is always registered and active: params
     `{ chatTitle?, workspaceName? }` (at least one), a `promptSnippet` plus guidelines to name both targets
     once on the first turn before replying with short (2–5 word) descriptive names — a PR-review session's
-    workspace as `#<number> <PR title>` — and to rename again only when a tool result says further renames
-    are allowed (the host's continuous setting) and the session's focus materially changes.
+    workspace as `#<number> <PR title>`. A target omitted from the first call may be named later, and an
+    already-named target is retried only when the session's focus materially changes: the guidance never
+    depends on an earlier result, because the host evaluates the current continuous setting on each call and
+    skips the rename when it is off.
     Explicit user restrictions against tools or allowing only specific tools take precedence; the naming
     guidance must not claim the rename tool is exempt.
     It delegates to the host-installed `setRenameSessionHandler` seam (no `agent` → `workspaces` edge) and

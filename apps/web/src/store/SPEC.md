@@ -402,7 +402,8 @@ per-workspace views/attention, terminal catalogs, and one **per-session chat run
   **`chatLineWidth` / `fileLineWidth`**, their independent **`chatLineWidthBounded` /
   `fileLineWidthBounded`** switches, **`customLayoutPresets: LayoutPreset[]`**,
   **`analyticsEnabled: boolean`**, **`analyticsConsentConfirmed: boolean`**,
-  **`subagentsEnabled: boolean`**, **`jbcentralQuotaEnabled: boolean`**,
+  **`subagentsEnabled: boolean`**, **`agentRenameContinuous: boolean`** (default `false`, read by the Chat
+  settings naming switch), **`jbcentralQuotaEnabled: boolean`**,
   and **`jbcentralQuotaRefreshSeconds: number`** ride the same `applyConfig` fold (host-owned, fieldwise
   defaulted/validated from the contracts helpers so an older or malformed host snapshot cannot poison
   the store). `terminalWindowsShell` narrows through `isTerminalWindowsShell` and otherwise uses

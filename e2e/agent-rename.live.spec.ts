@@ -32,6 +32,9 @@ test("the agent names the chat, workspace, and branch through rename_session wit
 	await waitForAgentSettled(page);
 
 	await expect(name).toHaveText("Login form plan", { timeout: 20_000 });
+	await expect
+		.poll(() => persistedWorkspaces().find((w) => w.id === before.id)?.branch, { timeout: 20_000 })
+		.toBe("login-form-plan");
 	const renamed = persistedWorkspaces().find((w) => w.id === before.id);
 	expect(renamed?.renamed).toBeUndefined();
 	expect(renamed?.worktreePath).toBe(before.worktreePath);

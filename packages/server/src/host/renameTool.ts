@@ -35,23 +35,15 @@ async function renameChat(
 	}
 }
 
-async function renameWorkspaceFor(
-	workspaceId: string,
-	name: string,
-	once: boolean,
-): Promise<string> {
+function renameWorkspaceFor(workspaceId: string, name: string, once: boolean): string {
 	try {
 		const ws = getWorkspace(workspaceId);
 		if (ws.kind === "default") return "Workspace: skipped — the Default workspace keeps its name.";
 		if (ws.kind === "external")
 			return "Workspace: skipped — an existing worktree is not renamed by ThinkRail.";
 		if (ws.renamed) return "Workspace: skipped — the user named it manually.";
-		const next = await renameAgentWorkspace(workspaceId, name, { once });
-		const branch =
-			next.branch === ws.branch
-				? `branch "${ws.branch}" kept`
-				: `branch renamed to "${next.branch}"`;
-		return `Workspace: renamed to "${next.name}" (${branch}).`;
+		const { workspace } = renameAgentWorkspace(workspaceId, name, { once });
+		return `Workspace: renamed to "${workspace.name}" (its branch follows unless it has been pushed).`;
 	} catch (err) {
 		return `Workspace: skipped — ${errorText(err)}.`;
 	}
@@ -66,8 +58,7 @@ export async function applyAgentRename(
 	const lines: string[] = [];
 	if (chatTitle !== undefined)
 		lines.push(await renameChat(sessionId, workspaceId, chatTitle, once));
-	if (workspaceName !== undefined)
-		lines.push(await renameWorkspaceFor(workspaceId, workspaceName, once));
+	if (workspaceName !== undefined) lines.push(renameWorkspaceFor(workspaceId, workspaceName, once));
 	lines.push(once ? ONCE_NOTE : CONTINUOUS_NOTE);
 	return lines.join("\n");
 }

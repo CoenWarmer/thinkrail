@@ -415,22 +415,35 @@ function assertAgentMayRename(ws: Workspace, once: boolean): void {
 	}
 }
 
-export async function renameAgentWorkspace(
+export interface AgentWorkspaceRename {
+	workspace: Workspace;
+	branchMove: Promise<Workspace | null>;
+}
+
+export function renameAgentWorkspace(
 	id: string,
 	name: string,
 	{ once = false }: { once?: boolean } = {},
-): Promise<Workspace> {
-	const ws = getWorkspace(id);
-	assertAgentMayRename(ws, once);
-	const project = getProjects().find((candidate) => candidate.id === ws.projectId);
-	if (!project) throw new Error(`Unknown project: ${ws.projectId}`);
-	const published = await isBranchPublished(project.path, ws.branch);
-	const fresh = getWorkspace(id);
-	assertAgentMayRename(fresh, once);
-	return renameWorkspace(id, name, {
-		lock: false,
-		renameBranch: !published && fresh.branch === ws.branch,
-	});
+): AgentWorkspaceRename {
+	const before = getWorkspace(id);
+	assertAgentMayRename(before, once);
+	const project = getProjects().find((candidate) => candidate.id === before.projectId);
+	if (!project) throw new Error(`Unknown project: ${before.projectId}`);
+	const workspace = renameWorkspace(id, name, { lock: false, renameBranch: false });
+	return { workspace, branchMove: moveUnpublishedBranch(project.path, workspace) };
+}
+
+async function moveUnpublishedBranch(repo: string, named: Workspace): Promise<Workspace | null> {
+	try {
+		if (await isBranchPublished(repo, named.branch)) return null;
+		const fresh = getWorkspace(named.id);
+		if (fresh.renamed || fresh.name !== named.name || fresh.branch !== named.branch) return null;
+		if (isBranchPushed(repo, fresh.branch)) return null;
+		return renameWorkspace(fresh.id, fresh.name, { lock: false });
+	} catch {
+		log.warn(`agent branch rename skipped for workspace ${named.id}`);
+		return null;
+	}
 }
 
 export function renameWorkspace(

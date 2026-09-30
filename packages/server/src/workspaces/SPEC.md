@@ -79,14 +79,19 @@ place as `kind: "external"` — outside the data dir, never created or mutated h
   `renameWorkspace` (**sync**; sets the sanitized, casing-preserved display `name`; `opts.lock` defaults
   `true` and sets `renamed: true`, marking the choice manual so the agentic `rename_session` tool never
   touches it again (manual is final; there is no unlock).
-  `renameAgentWorkspace(id, name, { once })` is the **async agentic door**. In once mode it refuses a
-  workspace that is no longer pristine (its display name is not the auto `workspace-N` equal to its branch),
-  rechecking after its awaits. It checks local upstream and
-  remote-tracking refs, then queries every configured remote with bounded, noninteractive `git ls-remote`
-  to detect published branches even under narrow fetch refspecs. A failed or timed-out remote check is
-  treated as potentially published: the display name changes, but the branch stays put. After awaiting,
-  it rechecks the manual-name lock, once-mode pristineness, and branch identity before delegating to `renameWorkspace` with
-  `{ lock: false, renameBranch: !published }`; a concurrent branch change also keeps the branch put.
+  `renameAgentWorkspace(id, name, { once })` is the **agentic door** and returns
+  `{ workspace, branchMove }`. It is **sync for the display name**, so naming never waits on the network:
+  once-mode and manual-lock checks run, then the display name is renamed with `renameBranch: false`. In
+  once mode it refuses a workspace that is no longer pristine (its display name is not the auto
+  `workspace-N` equal to its branch). The branch follows in the background `branchMove` promise: it checks
+  local upstream and remote-tracking refs, then queries every configured remote with bounded,
+  noninteractive `git ls-remote` to detect published branches even under narrow fetch refspecs. A failed or
+  timed-out remote check is treated as potentially published, so the branch stays put. After the only await,
+  with no further await before `git branch -m`, it rechecks the manual lock, that the display name is still
+  the one it was scheduled for (a newer agentic name or a manual rename supersedes it), branch identity,
+  and local publication signals, then delegates to `renameWorkspace(id, name, { lock: false })`. A remote
+  push landing during the `ls-remote` window itself is an accepted residual race. Failures warn-log and
+  resolve `null`.
   Because the agentic rename never sets the manual lock, a later agentic rename is possible only in
   continuous mode (`once: false`). `opts.renameBranch` defaults `true` for direct callers; the branch
   is derived via `toBranch`, uniqued against refs + worktree dirs, and moved with `git branch -m` only
@@ -217,7 +222,7 @@ place as `kind: "external"` — outside the data dir, never created or mutated h
   `listWorkspaces`, `listWorkspaceRecords`, `listAllWorkspaceRecords`, `forgetWorkspace`,
   `reclaimWorktree`, `removeWorkspace`,
   `workspaceDiffStats`, `workspaceDiffKey`, `getWorkspace`, `renameWorkspace`, `renameAgentWorkspace`,
-  `refreshUserOwnedWorkspace`,
+  `AgentWorkspaceRename`, `refreshUserOwnedWorkspace`,
   `completeInitialTerminalReservation`, `ensureWorkspaceScratchDir`, `setWorkspacePublisher`,
   `WorkspaceLifecycleEvent`, `setWorkspaceDiffBase`, `setWorkspaceSkillOverride`,
   `setWorkspaceSubagentsOverride`.

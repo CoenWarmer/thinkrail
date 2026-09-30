@@ -48,6 +48,13 @@ afterEach(() => {
 	else process.env.PI_CODING_AGENT_DIR = savedAgentDir;
 });
 
+async function branchSettles(id: string, expected: string): Promise<void> {
+	for (let attempt = 0; attempt < 100 && getWorkspace(id).branch !== expected; attempt += 1) {
+		await Bun.sleep(20);
+	}
+	expect(getWorkspace(id).branch).toBe(expected);
+}
+
 function chatIn(worktreePath: string) {
 	return writeFixtureSession(
 		defaultSessionDirFor(process.env.PI_CODING_AGENT_DIR ?? "", worktreePath),
@@ -69,10 +76,11 @@ test("by default the agent names chat + workspace + branch once, then further re
 		workspaceName: "Login Redirect",
 	});
 	expect(text).toBe(
-		`Chat: renamed to "Fix login redirect".\nWorkspace: renamed to "Login Redirect" (branch renamed to "login-redirect").\n${ONCE_NOTE}`,
+		`Chat: renamed to "Fix login redirect".\nWorkspace: renamed to "Login Redirect" (its branch follows unless it has been pushed).\n${ONCE_NOTE}`,
 	);
 	expect(SessionManager.open(chat.path).getSessionName()).toBe("Fix login redirect");
-	expect(getWorkspace(ws.id)).toMatchObject({ name: "Login Redirect", branch: "login-redirect" });
+	expect(getWorkspace(ws.id).name).toBe("Login Redirect");
+	await branchSettles(ws.id, "login-redirect");
 	expect(getWorkspace(ws.id).renamed).toBeUndefined();
 
 	expect(
@@ -91,7 +99,7 @@ test("once mode names a target first omitted, and enabling the setting later all
 		`Chat: renamed to "Plan login".\n${ONCE_NOTE}`,
 	);
 	expect(await applyAgentRename(chat.id, ws.id, { workspaceName: "Login Flow" })).toBe(
-		`Workspace: renamed to "Login Flow" (branch renamed to "login-flow").\n${ONCE_NOTE}`,
+		`Workspace: renamed to "Login Flow" (its branch follows unless it has been pushed).\n${ONCE_NOTE}`,
 	);
 	updateConfig({ agentRenameContinuous: true });
 	expect(await applyAgentRename(chat.id, ws.id, { chatTitle: "Auth cleanup" })).toBe(
@@ -127,9 +135,10 @@ test("with continuous renaming on, the agent may rename chat and workspace again
 			workspaceName: "#565 Auth Cleanup",
 		}),
 	).toBe(
-		`Chat: renamed to "Auth cleanup".\nWorkspace: renamed to "#565 Auth Cleanup" (branch renamed to "565-auth-cleanup").\n${CONTINUOUS_NOTE}`,
+		`Chat: renamed to "Auth cleanup".\nWorkspace: renamed to "#565 Auth Cleanup" (its branch follows unless it has been pushed).\n${CONTINUOUS_NOTE}`,
 	);
 	expect(SessionManager.open(chat.path).getSessionName()).toBe("Auth cleanup");
+	await branchSettles(ws.id, "565-auth-cleanup");
 	expect(getWorkspace(ws.id).renamed).toBeUndefined();
 });
 
@@ -156,8 +165,10 @@ test("a pushed branch is kept and the Default workspace is never renamed", async
 	git(repo, "update-ref", `refs/remotes/origin/${ws.branch}`, "HEAD");
 	const chat = chatIn(ws.worktreePath);
 	expect(await applyAgentRename(chat.id, ws.id, { workspaceName: "Shipped Work" })).toBe(
-		`Workspace: renamed to "Shipped Work" (branch "${ws.branch}" kept).\n${ONCE_NOTE}`,
+		`Workspace: renamed to "Shipped Work" (its branch follows unless it has been pushed).\n${ONCE_NOTE}`,
 	);
+	await Bun.sleep(300);
+	expect(getWorkspace(ws.id)).toMatchObject({ name: "Shipped Work", branch: ws.branch });
 
 	const defaultWs = (await listWorkspaces("p1")).find((w) => w.kind === "default");
 	if (!defaultWs) throw new Error("expected the Default workspace");

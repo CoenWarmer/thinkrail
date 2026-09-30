@@ -17,6 +17,7 @@ import {
 	createWorkspace,
 	ensureWorkspaceScratchDir,
 	forgetWorkspace,
+	getWorkspace,
 	listExistingWorktrees,
 	listWorkspaceRecords,
 	listWorkspaces,
@@ -458,34 +459,53 @@ test("agent rename keeps a pushed branch even when a narrow refspec hides its re
 	expect(remoteRefs).not.toContain(ws.branch);
 	expect(gitOut(repo, "config", "--get", `branch.${ws.branch}.remote`)).toBe("");
 
-	const renamed = await renameAgentWorkspace(ws.id, "New Display Name");
-	expect(renamed).toMatchObject({ name: "New Display Name", branch: ws.branch });
-	expect(renamed.renamed).toBeUndefined();
+	const { workspace, branchMove } = renameAgentWorkspace(ws.id, "New Display Name");
+	expect(workspace).toMatchObject({ name: "New Display Name", branch: ws.branch });
+	expect(await branchMove).toBeNull();
+	expect(getWorkspace(ws.id)).toMatchObject({ name: "New Display Name", branch: ws.branch });
+	expect(getWorkspace(ws.id).renamed).toBeUndefined();
 	expect(gitOut(backup, "rev-parse", `refs/heads/${ws.branch}`)).toBe(
 		gitOut(ws.worktreePath, "rev-parse", "HEAD"),
 	);
 });
 
-test("agent rename in once mode renames only a pristine workspace-N", async () => {
+test("agent rename updates the display name at once and moves an unpublished branch afterwards", async () => {
 	const ws = await createWorkspace("p1");
-	const first = await renameAgentWorkspace(ws.id, "Login Flow", { once: true });
-	expect(first).toMatchObject({ name: "Login Flow", branch: "login-flow" });
-	await expect(renameAgentWorkspace(ws.id, "Other Name", { once: true })).rejects.toThrow(
+	const { workspace, branchMove } = renameAgentWorkspace(ws.id, "Login Flow", { once: true });
+	expect(workspace).toMatchObject({ name: "Login Flow", branch: ws.branch });
+	expect((await branchMove)?.branch).toBe("login-flow");
+	expect(gitOut(ws.worktreePath, "rev-parse", "--abbrev-ref", "HEAD")).toBe("login-flow");
+	expect(() => renameAgentWorkspace(ws.id, "Other Name", { once: true })).toThrow(
 		"This workspace is already named",
 	);
-	expect((await renameAgentWorkspace(ws.id, "Other Name")).name).toBe("Other Name");
+	expect(renameAgentWorkspace(ws.id, "Other Name").workspace.name).toBe("Other Name");
 
 	const named = await createWorkspace("p1", "User Named");
-	await expect(renameAgentWorkspace(named.id, "Agent Name", { once: true })).rejects.toThrow(
+	expect(() => renameAgentWorkspace(named.id, "Agent Name", { once: true })).toThrow(
 		"The user named this workspace manually",
 	);
+});
+
+test("a deferred branch move yields to a manual rename or a newer agent name", async () => {
+	const manual = await createWorkspace("p1");
+	const first = renameAgentWorkspace(manual.id, "Agent Name");
+	renameWorkspace(manual.id, "Mine", { lock: true, renameBranch: false });
+	expect(await first.branchMove).toBeNull();
+	expect(getWorkspace(manual.id)).toMatchObject({ name: "Mine", branch: manual.branch });
+
+	const newer = await createWorkspace("p1");
+	const stale = renameAgentWorkspace(newer.id, "First Name");
+	const latest = renameAgentWorkspace(newer.id, "Second Name");
+	expect(await stale.branchMove).toBeNull();
+	expect((await latest.branchMove)?.branch).toBe("second-name");
 });
 
 test("agent rename keeps the branch when a remote cannot be checked", async () => {
 	git(repo, "remote", "add", "origin", join(dataDir, "missing.git"));
 	const ws = await createWorkspace("p1");
-	const renamed = await renameAgentWorkspace(ws.id, "Offline Display Name");
-	expect(renamed).toMatchObject({ name: "Offline Display Name", branch: ws.branch });
+	const { branchMove } = renameAgentWorkspace(ws.id, "Offline Display Name");
+	expect(await branchMove).toBeNull();
+	expect(getWorkspace(ws.id)).toMatchObject({ name: "Offline Display Name", branch: ws.branch });
 });
 
 test("renameWorkspace with lock:false renames name + branch but leaves renamed unset (agentic)", async () => {

@@ -1,8 +1,8 @@
 import { type AppConfigUpdate, isLineWidth, LINE_WIDTH_COLUMNS } from "@thinkrail/contracts";
 import { useEffect, useState } from "react";
+import { Switch } from "@/components/ui/switch";
 import { toast, useAppStore } from "@/store";
 import { getTransport } from "@/transport";
-import { SettingsSwitch } from "./SettingsSwitch";
 
 interface LineWidthControlProps {
 	kind: "chat" | "file";
@@ -108,7 +108,7 @@ function LineWidthControl({
 						Wrap sooner when this pane is narrower than {value} symbols.
 					</span>
 				</div>
-				<SettingsSwitch
+				<Switch
 					checked={bounded}
 					label={`Keep ${title.toLowerCase()} lines within the pane width`}
 					testId={`${kind}-line-width-bounded`}

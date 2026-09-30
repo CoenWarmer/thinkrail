@@ -7,9 +7,9 @@ import { useEffect, useState } from "react";
 import { ModelSelector } from "@/chat/ModelSelector";
 import { ThinkingSelector } from "@/chat/ThinkingSelector";
 import { useModelCatalog } from "@/chat/useModelCatalog";
+import { Switch } from "@/components/ui/switch";
 import { toast, useAppStore } from "@/store";
 import { getTransport } from "@/transport";
-import { SettingsSwitch } from "./SettingsSwitch";
 
 export function ReviewSettings() {
 	const reviewModel = useAppStore((s) => s.reviewModel);
@@ -106,7 +106,7 @@ export function ReviewSettings() {
 							: "Off — findings wait for you; nothing is auto-sent."}
 					</span>
 				</div>
-				<SettingsSwitch
+				<Switch
 					checked={autoFix}
 					label="Auto-fix requested changes"
 					testId="review-autofix-toggle"
@@ -151,7 +151,7 @@ export function AgentReviewSettings({
 							: "Off — only the Review button starts a review."}
 					</span>
 				</div>
-				<SettingsSwitch
+				<Switch
 					checked={enabled}
 					label="Let the agent request review"
 					testId="agent-review-toggle"

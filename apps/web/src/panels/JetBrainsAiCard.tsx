@@ -21,9 +21,9 @@ import {
 } from "@thinkrail/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { copyText } from "@/lib";
 import { getTransport } from "@/transport";
-import { SettingsSwitch } from "./SettingsSwitch";
 
 const LOGIN_CMD = "central login";
 const QUOTA_INTERVAL_RANGE = `${JBCENTRAL_QUOTA_REFRESH_SECONDS.min}–${JBCENTRAL_QUOTA_REFRESH_SECONDS.max}`;
@@ -85,7 +85,7 @@ function JbcentralQuotaSettings({
 						Display recurring JetBrains AI credits while Central is connected.
 					</p>
 				</div>
-				<SettingsSwitch
+				<Switch
 					checked={enabled}
 					label="Show JetBrains AI quota in top bar"
 					testId="jbcentral-quota-toggle"

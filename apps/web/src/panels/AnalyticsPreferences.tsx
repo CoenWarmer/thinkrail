@@ -1,4 +1,4 @@
-import { SettingsSwitch } from "./SettingsSwitch";
+import { Switch } from "@/components/ui/switch";
 
 export const ANALYTICS_DESCRIPTION =
 	"Share anonymous product usage and how you found ThinkRail. We never collect prompts, code, files, credentials, or account identity.";
@@ -21,7 +21,7 @@ export function AnalyticsSharingSwitch({
 				<span className="tr-title-compact text-text-default">Share additional usage data</span>
 				{description && <span>{description}</span>}
 			</div>
-			<SettingsSwitch
+			<Switch
 				checked={enabled}
 				disabled={disabled}
 				label="Share additional usage data"

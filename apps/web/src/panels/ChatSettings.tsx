@@ -11,11 +11,11 @@ import {
 	STREAMING_RESPONSE_MOVEMENT_LIMITS,
 	type StreamingResponseMovement,
 } from "@/chat/chatPreferences";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib";
 import { selectActiveWorkspace, toast, useAppStore } from "@/store";
 import { getTransport } from "@/transport";
 import { SettingsRadioCards, type SettingsRadioChoice } from "./SettingsRadioCards";
-import { SettingsSwitch } from "./SettingsSwitch";
 
 const MESSAGE_ORDER_CHOICES: SettingsRadioChoice<ChatMessageOrder>[] = [
 	{
@@ -212,7 +212,7 @@ export function SubagentSettings({
 							: "Off — workspaces cannot delegate unless they override it."}
 					</span>
 				</div>
-				<SettingsSwitch
+				<Switch
 					checked={globalEnabled}
 					label="Enable subagents by default"
 					testId="subagents-global-toggle"

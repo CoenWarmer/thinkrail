@@ -3,11 +3,12 @@ import {
 	RiRefreshLine as RefreshCw,
 	RiShieldCheckLine as ShieldCheck,
 } from "@remixicon/react";
-import type { Project, SkillCatalogEntry, SkillDecision, Workspace } from "@thinkrail/contracts";
+import type { Project, SkillCatalogEntry, Workspace } from "@thinkrail/contracts";
 import { useCallback, useEffect, useState } from "react";
 import { LoadingRegion } from "@/components/Skeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { IconTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toast, useAppStore } from "@/store";
@@ -175,11 +176,12 @@ export function SkillsDialog({
 					<span className="shrink-0 rounded-full bg-control-bg-selected px-8 text-text-muted tr-text-metadata">
 						{group.items.length}
 					</span>
-					<Toggle
-						on={groupOn}
-						busy={busy || lockedByMaster}
-						testid="group-toggle"
-						onClick={() => setGroupEnabled(group.key, !groupOn)}
+					<Switch
+						checked={groupOn}
+						disabled={busy || lockedByMaster}
+						label={`Enable ${group.label} skills`}
+						testId="group-toggle"
+						onChange={(enabled) => setGroupEnabled(group.key, enabled)}
 					/>
 				</div>
 				<div className="ml-8 divide-y divide-border-default border-border-default border-l">
@@ -286,11 +288,12 @@ export function SkillsDialog({
 									<span className="min-w-0 flex-1 tr-text-eyebrow text-text-default">
 										All plugins
 									</span>
-									<Toggle
-										on={!pluginsDisabled}
-										busy={busy}
-										testid="all-plugins-toggle"
-										onClick={() => setGroupEnabled("@plugins", pluginsDisabled)}
+									<Switch
+										checked={!pluginsDisabled}
+										disabled={busy}
+										label="Enable all plugin skills"
+										testId="all-plugins-toggle"
+										onChange={(enabled) => setGroupEnabled("@plugins", enabled)}
 									/>
 								</div>
 							) : null}
@@ -302,43 +305,6 @@ export function SkillsDialog({
 		</Dialog>
 	);
 }
-
-function Toggle({
-	on,
-	busy,
-	testid,
-	onClick,
-}: {
-	on: boolean;
-	busy: boolean;
-	testid: string;
-	onClick: () => void;
-}) {
-	return (
-		<button
-			type="button"
-			data-testid={testid}
-			data-on={on}
-			disabled={busy}
-			onClick={onClick}
-			className={cn(
-				"shrink-0 rounded-[var(--radius-sm)] border px-8 py-2 tr-text-metadata transition-colors disabled:bg-control-disabled-bg disabled:text-control-disabled-text",
-				on
-					? "border-primary-muted bg-clip-padding bg-primary-subtle text-primary"
-					: "border-border-default text-text-muted hover:bg-control-bg-hovered",
-			)}
-		>
-			{on ? "on" : "off"}
-		</button>
-	);
-}
-
-const DECISION_TEXT: Record<SkillDecision, string> = {
-	load: "on",
-	disabled: "off",
-	untrusted: "trust to enable",
-	"pending-ack": "new",
-};
 
 function SkillRow({
 	entry,
@@ -373,7 +339,7 @@ function SkillRow({
 					Enable
 				</Button>
 			) : entry.decision === "untrusted" ? (
-				<span className="shrink-0 text-text-muted tr-text-metadata">{DECISION_TEXT.untrusted}</span>
+				<span className="shrink-0 text-text-muted tr-text-metadata">trust to enable</span>
 			) : groupOff ? (
 				<span
 					className="shrink-0 text-text-muted tr-text-metadata"
@@ -382,21 +348,13 @@ function SkillRow({
 					group off
 				</span>
 			) : (
-				<button
-					type="button"
-					data-testid="skill-toggle"
-					data-on={loaded}
+				<Switch
+					checked={loaded}
 					disabled={busy}
-					onClick={() => onToggle(!loaded)}
-					className={cn(
-						"shrink-0 rounded-[var(--radius-sm)] border px-8 py-2 tr-text-metadata transition-colors disabled:bg-control-disabled-bg disabled:text-control-disabled-text",
-						loaded
-							? "border-primary-muted bg-clip-padding bg-primary-subtle text-primary"
-							: "border-border-default text-text-muted hover:bg-control-bg-hovered",
-					)}
-				>
-					{DECISION_TEXT[entry.decision]}
-				</button>
+					label={`Enable skill ${entry.name}`}
+					testId="skill-toggle"
+					onChange={onToggle}
+				/>
 			)}
 		</div>
 	);

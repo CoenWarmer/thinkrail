@@ -1,18 +1,13 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SettingsSwitch } from "./SettingsSwitch";
+import { Switch } from "./switch";
 
-test("settings switches expose one accessible checked-state contract", () => {
+test("switches expose one accessible checked-state contract", () => {
 	const on = renderToStaticMarkup(
-		<SettingsSwitch checked label="Enable feature" testId="feature-toggle" onChange={() => {}} />,
+		<Switch checked label="Enable feature" testId="feature-toggle" onChange={() => {}} />,
 	);
 	const off = renderToStaticMarkup(
-		<SettingsSwitch
-			checked={false}
-			label="Enable feature"
-			testId="feature-toggle"
-			onChange={() => {}}
-		/>,
+		<Switch checked={false} label="Enable feature" testId="feature-toggle" onChange={() => {}} />,
 	);
 
 	expect(on).toContain('role="switch"');

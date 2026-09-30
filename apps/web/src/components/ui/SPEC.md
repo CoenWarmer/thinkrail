@@ -19,6 +19,9 @@ The shadcn/ui primitives (Radix), copied in and owned here, themed with our desi
   classes), `popover` (with an optional `container` portal target — pass the host Dialog node so a popover
   inside a
   Dialog stays wheel-scrollable under its scroll lock), `command` (cmdk combobox body), `textarea`,
+  `switch` (the one boolean-toggle control —
+  `role="switch"` + `aria-checked`; off = grey track, knob left; on = the old "On" button's
+  `primary-subtle` fill + `primary-muted` edge, `primary` knob right; used by Settings and the Skills manager),
   `tooltip` (+ the `IconTooltip` convenience; one root `TooltipProvider` sets the delay), `resizable`, `toast` (Radix Toast primitives — `ToastProvider`/`Toast`/`ToastViewport`/`Title`/
   `Description`/`Close` + the `error`/`success`/`info` `toastVariants`; a left accent bar carries severity.
   Presentational only — the store owns the queue; `panels/Toaster` composes these against it).

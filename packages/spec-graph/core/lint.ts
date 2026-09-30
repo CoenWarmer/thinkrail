@@ -55,14 +55,36 @@ export interface LintReport {
 	findings: LintFinding[];
 }
 
-const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
-const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/;
-const FENCE = /^\s*(```|~~~)/;
+const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
+const LIST_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
+const FENCE_OPEN = /^\s*(`{3,}|~{3,})/;
+const FENCE_CLOSE = /^\s*(`{3,}|~{3,})\s*$/;
+const TABLE_DELIMITER_ROW = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+
+function splitCells(row: string): string[] {
+	const cells: string[] = [];
+	let cell = "";
+	let backslashes = 0;
+	for (const ch of row) {
+		if (ch === "|" && backslashes % 2 === 0) {
+			cells.push(cell);
+			cell = "";
+		} else if (ch === "|") {
+			cell = `${cell.slice(0, -1)}|`;
+		} else {
+			cell += ch;
+		}
+		backslashes = ch === "\\" ? backslashes + 1 : 0;
+	}
+	cells.push(cell);
+	return cells;
+}
 
 interface BodyLine {
 	text: string;
 	line: number;
 	inFence: boolean;
+	opensFence: boolean;
 }
 
 function bodyLines(entry: SpecContentEntry): BodyLine[] {
@@ -74,18 +96,16 @@ function bodyLines(entry: SpecContentEntry): BodyLine[] {
 	let fence: string | null = null;
 	for (let i = 0; i < body.length; i++) {
 		const text = body[i] ?? "";
-		const opens = FENCE.exec(text);
-		if (fence === null && opens) {
-			fence = opens[1] ?? null;
-			out.push({ text, line: offset + i + 1, inFence: true });
+		if (fence === null) {
+			const opens = FENCE_OPEN.exec(text);
+			if (opens) fence = opens[1] ?? null;
+			const inFence = fence !== null;
+			out.push({ text, line: offset + i + 1, inFence, opensFence: inFence });
 			continue;
 		}
-		if (fence !== null && opens && opens[1] === fence) {
-			fence = null;
-			out.push({ text, line: offset + i + 1, inFence: true });
-			continue;
-		}
-		out.push({ text, line: offset + i + 1, inFence: fence !== null });
+		const closes = FENCE_CLOSE.exec(text)?.[1];
+		if (closes && closes[0] === fence[0] && closes.length >= fence.length) fence = null;
+		out.push({ text, line: offset + i + 1, inFence: true, opensFence: false });
 	}
 	return out;
 }
@@ -162,6 +182,7 @@ function headingGapFindings(
 function bulletFindings(entry: SpecContentEntry, lines: BodyLine[], b: SpecBudgets): LintFinding[] {
 	const findings: LintFinding[] = [];
 	let start: BodyLine | null = null;
+	let indent = 0;
 	let length = 0;
 	const close = (): void => {
 		if (start && length > b.maxBulletLines) {
@@ -176,15 +197,20 @@ function bulletFindings(entry: SpecContentEntry, lines: BodyLine[], b: SpecBudge
 		length = 0;
 	};
 	for (const l of lines) {
-		if (l.inFence) continue;
 		const text = l.text;
+		if (l.inFence) {
+			if (l.opensFence && start && text.length - text.trimStart().length <= indent) close();
+			continue;
+		}
 		if (text.trim() === "" || HEADING.test(text)) {
 			close();
 			continue;
 		}
-		if (LIST_ITEM.test(text)) {
+		const item = LIST_ITEM.exec(text);
+		if (item) {
 			close();
 			start = l;
+			indent = item[1]?.length ?? 0;
 			length = 1;
 			continue;
 		}
@@ -194,12 +220,31 @@ function bulletFindings(entry: SpecContentEntry, lines: BodyLine[], b: SpecBudge
 	return findings;
 }
 
+function tableRows(lines: BodyLine[]): BodyLine[] {
+	const rows: BodyLine[] = [];
+	let block: BodyLine[] = [];
+	let isTable = false;
+	const flush = (): void => {
+		if (isTable) rows.push(...block);
+		block = [];
+		isTable = false;
+	};
+	for (const l of lines) {
+		if (l.inFence || l.text.trim() === "" || HEADING.test(l.text)) {
+			flush();
+			continue;
+		}
+		if (block.length === 1 && TABLE_DELIMITER_ROW.test(l.text)) isTable = true;
+		block.push(l);
+	}
+	flush();
+	return rows;
+}
+
 function tableFindings(entry: SpecContentEntry, lines: BodyLine[], b: SpecBudgets): LintFinding[] {
 	const findings: LintFinding[] = [];
-	for (const l of lines) {
-		if (l.inFence || !l.text.trimStart().startsWith("|")) continue;
-		const widest = l.text
-			.split("|")
+	for (const l of tableRows(lines)) {
+		const widest = splitCells(l.text)
 			.map((cell) => cell.trim().length)
 			.reduce((max, n) => Math.max(max, n), 0);
 		if (widest > b.maxTableCellChars) {
@@ -228,7 +273,7 @@ function sectionFindings(entry: SpecContentEntry, lines: BodyLine[]): LintFindin
 			continue;
 		}
 		const current = sections[sections.length - 1];
-		if (current && l.text.trim() !== "") current.content++;
+		if (current && l.text.trim() !== "" && !HEADING.test(l.text)) current.content++;
 	}
 	const present = new Set(sections.map((s) => s.title));
 	for (const required of REQUIRED_MODULE_SECTIONS) {

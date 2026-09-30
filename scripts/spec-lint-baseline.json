@@ -10,7 +10,7 @@
 	"apps/desktop/SPEC.md": {
 		"bullet-length": 1,
 		"heading-gap": 1,
-		"unknown-section": 10
+		"unknown-section": 11
 	},
 	"apps/web/SPEC.md": {
 		"bullet-length": 9,

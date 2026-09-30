@@ -572,7 +572,9 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
     the tool is gated — the `startPlanReview` button path is a separate host seam. See `submodule-server-host-plan-review`.
     The `rename_session` tool (`renameTool.ts`) is always registered and active: params
     `{ chatTitle?, workspaceName? }` (at least one), a `promptSnippet` plus guidelines to name both targets
-    on the first turn before replying and rename again only when the session's focus materially changes.
+    once on the first turn before replying with short (2–5 word) descriptive names — a PR-review session's
+    workspace as `#<number> <PR title>` — and to rename again only when a tool result says further renames
+    are allowed (the host's continuous setting) and the session's focus materially changes.
     Explicit user restrictions against tools or allowing only specific tools take precedence; the naming
     guidance must not claim the rename tool is exempt.
     It delegates to the host-installed `setRenameSessionHandler` seam (no `agent` → `workspaces` edge) and
@@ -777,7 +779,8 @@ agent or resolving a model. Both paths publish the same `session_info_changed` P
 Provenance is one durable marker: a `source: "manual"` write also appends a `thinkrail.manual-title` custom
 entry (not LLM context) to the same pi session, so the lock survives restarts with no sidecar. A
 `source: "agent"` write is a compare-and-set inside the same serialized file operation: it returns
-`"locked"` without writing when any such entry exists. Results are `"renamed" | "unchanged" | "locked"`.
+`"locked"` without writing when any such entry exists; with `{ once: true }` it also returns `"named"` without
+writing when the session already has any name. Results are `"renamed" | "unchanged" | "locked" | "named"`.
 The manual wire mutation is unconditional and final — there is no unlock. The architecture's accepted
 no-cross-process coordination rule still applies.
 

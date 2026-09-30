@@ -300,10 +300,14 @@ channel fan-out, and the process-boot wrapper both launchers share.
   `ackSend.ts` (the send-ack policy — see "Get right"); `renameTool.ts` (the **agentic rename** handler behind agent's
   `rename_session` tool, installed via `setRenameSessionHandler` — the composition of `agent` +
   `workspaces` only the host may make). It resolves the calling session's workspace, then applies
-  each requested target independently and reports each as renamed or skipped with a reason: `chatTitle` →
-  `renameSession(..., "agent")` (skipped when the chat carries a manual-title marker);
-  `workspaceName` → skipped for a `renamed` (manual/user-named), Default, or external workspace, else
-  `renameAgentWorkspace(id, name)` (workspaces checks all configured remotes asynchronously, preserving a
+  each requested target independently and reports each as renamed or skipped with a reason. It reads
+  `settings.agentRenameContinuous` per call: off (the default) passes **once** mode, so a target the agent
+  or user already named is skipped and the result tells the agent the names are final; on, it tells the
+  agent it may rename again when the session's focus materially changes. `chatTitle` →
+  `renameSession(..., "agent", { once })` (skipped when the chat carries a manual-title marker, or in once
+  mode when it has any name); `workspaceName` → skipped for a `renamed` (manual/user-named), Default, or
+  external workspace, else
+  `renameAgentWorkspace(id, name, { once })` (workspaces checks all configured remotes asynchronously, preserving a
   published branch — or one whose publication cannot be verified — while updating the display name).
   An agentic rename never locks, so the agent may rename again as focus shifts. Invalid names
   surface as a skip, not a thrown tool error. There is **no programmatic naming**: no prompt-commit,

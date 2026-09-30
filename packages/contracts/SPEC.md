@@ -270,7 +270,7 @@ of the host.
   **`AppConfig`** (`{ theme, themeMode, systemThemePair?, analyticsEnabled, analyticsConsentConfirmed, terminalReplayKb,
   terminalWindowsShell, composerGrowthLimit, chatLineWidth, fileLineWidth, chatLineWidthBounded,
   fileLineWidthBounded, customLayoutPresets, reviewModel?, reviewEffort?, reviewAutoFix, agentReviewEnabled,
-  subagentsEnabled, jbcentralQuotaEnabled, jbcentralQuotaRefreshSeconds }` — an extensible bag; the line-width fields join
+  subagentsEnabled, agentRenameContinuous, jbcentralQuotaEnabled, jbcentralQuotaRefreshSeconds }` — an extensible bag; the line-width fields join
   the wire at protocol v61 and `terminalWindowsShell` at v62. `terminalWindowsShell`
   (`"auto" | "pwsh" | "powershell" | "cmd"`, default `"auto"`) is read only by `server/terminal` on
   Windows and ignored elsewhere — see
@@ -282,7 +282,10 @@ of the host.
   and the explicit Dark default; `subagentsEnabled` is the host-wide subagent default (`true` for current
   behavior), overridden only by `Workspace.subagentsOverride`; `agentReviewEnabled` (default `true`, on the
   wire from `AGENT_REVIEW_SETTING_PROTOCOL_VERSION` = v68) gates the worker's in-session `request_review`
-  tool and applies live to open sessions — the Review button is independent (see [[submodule-server-host-plan-review]]); `customLayoutPresets` is the bounded
+  tool and applies live to open sessions — the Review button is independent (see [[submodule-server-host-plan-review]]);
+  `agentRenameContinuous` (default `false`, on the wire from `AGENT_RENAME_SETTING_PROTOCOL_VERSION` = v71)
+  lets the `rename_session` tool rename an already-named chat/workspace again; off, the agent only names
+  still-unnamed targets (see [[submodule-server-host]]); `customLayoutPresets` is the bounded
   resource-free catalog and is the **only** layout value synchronized by the host; current/default preset
   and group limits are web-local); `analyticsEnabled` is the additional-data preference and host gate,
   default `false`, while `analyticsConsentConfirmed` defaults `false` and records completion of the initial

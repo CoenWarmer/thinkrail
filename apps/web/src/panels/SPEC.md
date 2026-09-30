@@ -489,7 +489,11 @@ a project picker, the prompt hero, and the reused
   whole block requires `protocolVersion >= SUBAGENT_SETTINGS_PROTOCOL_VERSION`, so an independently shipped
   client never offers unsupported mutations against an older host.
   Global mutation converges through `settings.changed`, local mutation through `workspace.updated`, and
-  neither is optimistic. `Use global` sends `null`, so later global changes continue to flow through);
+  neither is optimistic. `Use global` sends `null`, so later global changes continue to flow through.
+  A props-driven **Chat & workspace naming** block (`AgentRenameSettings`) follows: one host-synchronized
+  switch over `store.agentRenameContinuous` (**Keep names up to date**, default off — the agent names each
+  chat and workspace once) → `settings.update { agentRenameContinuous }`, hidden below
+  `AGENT_RENAME_SETTING_PROTOCOL_VERSION` so an older host never appears to honor it);
   the
   **shell-owned injected Layout
   section** (Balanced/Focus/Review

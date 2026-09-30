@@ -126,7 +126,9 @@ dependency. This keeps test process drivers outside both launchers and the serve
    durable session name (`session_info`), never browser view state or a host sidecar. **Names change only
    two ways: manually by the user, or agentically by the main agent calling the `rename_session` tool** —
    there is no programmatic/heuristic naming. The tool renames the calling chat, its workspace (display name
-   plus derived branch while the branch is unpushed), or both, and is guided to keep names relevant as the
+   plus derived branch while the branch is unpushed), or both. By default the agent names each target
+   **once** — only while it is still unnamed — with a short descriptive name (a PR-review workspace is named
+   `#<number> <PR title>`); the host-wide `agentRenameContinuous` setting instead lets it rename again as the
    session's focus evolves. A manual rename is final per target: a manually named workspace (`renamed`) or
    chat (a durable manual-title marker in the pi session) is never renamed by the agent again. Clients
    hydrate `SessionSummary.title`, converge live on `session_info_changed`, and continue to route by session

@@ -43,7 +43,7 @@ function renameWorkspaceFor(workspaceId: string, name: string, once: boolean): s
 			return "Workspace: skipped — an existing worktree is not renamed by ThinkRail.";
 		if (ws.renamed) return "Workspace: skipped — the user named it manually.";
 		const { workspace } = renameAgentWorkspace(workspaceId, name, { once });
-		return `Workspace: renamed to "${workspace.name}" (its branch follows unless it has been pushed).`;
+		return `Workspace: renamed to "${workspace.name}" (its branch is renamed in the background if the branch can be verified as unpushed; otherwise it keeps its current name).`;
 	} catch (err) {
 		return `Workspace: skipped — ${errorText(err)}.`;
 	}

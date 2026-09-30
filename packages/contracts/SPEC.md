@@ -178,9 +178,11 @@ of the host.
   walk), **`ProjectPathStatus`** (a
   candidate path's kind — `repo` / `initable` / `missing` / `notDirectory` — so the UI opens, offers a
   `git init`, or shows an error), `Workspace` (git worktree; its
-  optional **`renamed`** flag is the manual-name lock — absent = still renamable by the agent's
-  `rename_session` tool (pristine `workspace-N` or an agentic name); `true` = user-named (manual rename or
-  a named create), never touched by the agent again; its optional **`kind: "default"`** marks the built-in per-project **Default workspace** — the
+  optional **`renamed`** flag is the manual-name lock — `true` = user-named (manual rename or a named
+  create), never touched by the agent again; absent = only no manual lock. Agent eligibility also depends on
+  `AppConfig.agentRenameContinuous`: off (default), the `rename_session` tool renames only a pristine
+  workspace (display name still the auto `workspace-N` equal to its branch); on, an agentic name may be
+  renamed again; its optional **`kind: "default"`** marks the built-in per-project **Default workspace** — the
   project folder itself as a workspace, exactly one per project, pinned first in `workspace.list`,
   non-removable and non-renamable server-side; **`kind: "external"`** marks an explicitly attached,
   user-owned worktree ThinkRail may forget but must never rename or reclaim; absent = a ThinkRail-managed

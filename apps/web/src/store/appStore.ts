@@ -1,5 +1,4 @@
 import type {
-	ActivityStatus,
 	AppConfig,
 	AskUserQuestionResult,
 	ComposerGrowthLimit,
@@ -15,11 +14,11 @@ import type {
 	RefreshedModels,
 	ReviewChangedPayload,
 	ReviewSnapshot,
-	SessionActivity,
-	SessionActivityPayload,
 	SessionEventPayload,
 	SessionQueueState,
 	SessionResources,
+	SessionState,
+	SessionStateRecord,
 	SessionStats,
 	SessionSummary,
 	SlashCommandInfo,
@@ -89,6 +88,7 @@ import {
 	isChatResourceReadCurrent,
 	isChatResourceScopeAlive,
 	selectActiveWorkspaceProjectId,
+	selectAttentionCenterTab,
 	selectLayoutResourcePlacement,
 	selectWorkspaceById,
 	selectWorkspaceNavTick,
@@ -297,11 +297,6 @@ export const SettingsSection = {
 } as const;
 export type SettingsSection = (typeof SettingsSection)[keyof typeof SettingsSection];
 
-export interface WorkspaceActivity {
-	projectId: string;
-	sessions: Record<string, ActivityStatus>;
-}
-
 export interface Toast {
 	id: string;
 	variant: "error" | "success" | "info";
@@ -356,6 +351,7 @@ export interface SessionRuntime {
 	extUiQueue: ExtUiDialogRequest[];
 	extUiStatus: Record<string, string>;
 	extUiWidget: Record<string, string[]>;
+	hostState: SessionState | null;
 }
 
 const EMPTY_QUEUE: SessionQueueState = { steering: [], followUp: [] };
@@ -386,6 +382,7 @@ function newRuntime(
 		extUiQueue: [],
 		extUiStatus: {},
 		extUiWidget: {},
+		hostState: null,
 	};
 }
 
@@ -751,6 +748,12 @@ function reduceExtUi(
 		case "confirm":
 		case "input":
 		case "editor":
+			if (
+				rt.pendingExtUi?.id === request.id ||
+				rt.extUiQueue.some((candidate) => candidate.id === request.id)
+			) {
+				return rt;
+			}
 			return rt.pendingExtUi
 				? { ...rt, extUiQueue: [...rt.extUiQueue, request] }
 				: { ...rt, pendingExtUi: request };
@@ -776,6 +779,24 @@ function reduceExtUi(
 	}
 }
 
+function withHostState(runtime: SessionRuntime, hostState: SessionState | null): SessionRuntime {
+	let next = runtime.hostState === hostState ? runtime : { ...runtime, hostState };
+	const dialogId =
+		hostState?.needsInput?.kind === "dialog" ? hostState.needsInput.request.id : null;
+	if (dialogId === null) {
+		if (!next.pendingExtUi && next.extUiQueue.length === 0) return next;
+		return { ...next, pendingExtUi: null, extUiQueue: [] };
+	}
+	while (next.pendingExtUi && next.pendingExtUi.id !== dialogId) {
+		next = reduceExtUi(next, {
+			id: next.pendingExtUi.id,
+			sessionId: next.pendingExtUi.sessionId,
+			kind: "dismiss",
+		});
+	}
+	return next;
+}
+
 interface AppState {
 	resourceSnapshots: ChatResourceSnapshots;
 	resourceRevision: number;
@@ -797,6 +818,7 @@ interface AppState {
 	selectedProjectId: string | null;
 	activeWorkspaceId: string | null;
 	workspaceSelectionHistory: string[];
+	pendingWorkspaceChatActivation: string | null;
 	routeChatTarget: RouteChatTarget | null;
 	routeChatTargetGeneration: number;
 	workbenchFrame: WorkbenchFrame | null;
@@ -815,10 +837,18 @@ interface AppState {
 	chatStartsByWorkspace: Record<string, number>;
 	worktreeCreationsByProject: Record<string, number>;
 	deletedSessionsByWorkspace: Record<string, Record<string, true>>;
-	activityByWorkspace: Record<string, WorkspaceActivity>;
 	terminalsByWorkspace: Record<string, TerminalTab[]>;
 	activeTerminalByWorkspace: Record<string, string | null>;
 	sessions: Record<string, SessionRuntime>;
+	sessionStateByWorkspace: Record<string, Record<string, SessionStateRecord>>;
+	sessionStateClock: number;
+	sessionStateTickBySession: Record<string, number>;
+	sessionStateSnapshotInstalled: boolean;
+	directChatActivationTickBySession: Record<string, number>;
+	directActivatedCompletionBySession: Record<string, string>;
+	pendingDirectChatActivationBySession: Record<string, true>;
+	renderedCompletionBySession: Record<string, string>;
+	obscuredChatSessions: Record<string, true>;
 	extUiOrphans: ExtUiRequest[];
 	models: WireModel[];
 	providerVersion: number;
@@ -896,6 +926,7 @@ interface AppState {
 	hydrateExpandedProjects: (projectIds: readonly string[]) => void;
 	selectMain: () => void;
 	activateWorkspace: (workspace: Pick<Workspace, "id" | "projectId">) => void;
+	consumeWorkspaceChatActivation: (workspaceId: string) => void;
 	activateWorkspaceFromRoute: (
 		workspace: Pick<Workspace, "id" | "projectId">,
 		sessionId?: string,
@@ -990,6 +1021,11 @@ interface AppState {
 		baselineSessionIds: readonly string[],
 		authoritativeSessionIds: readonly string[],
 	) => void;
+	installSessionStateSnapshot: (records: readonly SessionStateRecord[]) => void;
+	applySessionState: (record: SessionStateRecord) => void;
+	noteDirectChatActivation: (sessionId: string) => void;
+	noteRenderedCompletion: (sessionId: string, completionId: string) => void;
+	setChatObscured: (sessionId: string, obscured: boolean) => void;
 	reopenChat: (workspaceId: string, sessionId: string, options?: LayoutOpenOptions) => void;
 	restorePlacedChatCache: (
 		workspaceId: string,
@@ -998,8 +1034,6 @@ interface AppState {
 		title: string,
 	) => void;
 	noteClosedChats: (workspaceId: string, entries: ClosedChat[]) => void;
-	hydrateSessionActivity: (rows: SessionActivity[]) => void;
-	applySessionActivity: (payload: SessionActivityPayload) => void;
 	hydrateSession: (
 		summary: SessionSummary,
 		hydrated: HydratedRuntime,
@@ -1135,6 +1169,20 @@ function withWorkspaceSelected(history: string[], workspaceId: string): string[]
 		: [workspaceId, ...history.filter((id) => id !== workspaceId)];
 }
 
+function workspaceActivationPatch(
+	state: Pick<AppState, "removedWorkspaceIds" | "workspaceSelectionHistory">,
+	workspace: Pick<Workspace, "id" | "projectId">,
+):
+	| Pick<AppState, "selectedProjectId" | "activeWorkspaceId" | "workspaceSelectionHistory">
+	| Record<string, never> {
+	if (state.removedWorkspaceIds[workspace.id]) return {};
+	return {
+		selectedProjectId: workspace.projectId,
+		activeWorkspaceId: workspace.id,
+		workspaceSelectionHistory: withWorkspaceSelected(state.workspaceSelectionHistory, workspace.id),
+	};
+}
+
 function recentWorkspaceFallback(
 	state: Pick<
 		AppState,
@@ -1170,49 +1218,21 @@ function pruneExpandedProjects(
 function reconcileProjectNavigation(
 	state: Pick<AppState, "selectedProjectId" | "activeWorkspaceId" | "workspaces">,
 	projects: Project[],
-): Pick<AppState, "selectedProjectId" | "activeWorkspaceId"> | Record<string, never> {
+):
+	| Pick<AppState, "selectedProjectId" | "activeWorkspaceId" | "pendingWorkspaceChatActivation">
+	| Record<string, never> {
 	const currentProjectId = selectActiveWorkspaceProjectId(state) ?? state.selectedProjectId;
 	if (!currentProjectId || projects.some((project) => project.id === currentProjectId)) return {};
-	return { selectedProjectId: projects[0]?.id ?? null, activeWorkspaceId: null };
+	return {
+		selectedProjectId: projects[0]?.id ?? null,
+		activeWorkspaceId: null,
+		pendingWorkspaceChatActivation: null,
+	};
 }
 
 function omitKey<T>(record: Record<string, T>, key: string): Record<string, T> {
 	const { [key]: _dropped, ...rest } = record;
 	return rest;
-}
-
-function sameActivityMap(
-	prev: Record<string, WorkspaceActivity>,
-	next: Record<string, WorkspaceActivity>,
-): boolean {
-	const prevKeys = Object.keys(prev);
-	if (prevKeys.length !== Object.keys(next).length) return false;
-	return prevKeys.every((workspaceId) => {
-		const before = prev[workspaceId];
-		const after = next[workspaceId];
-		if (!before || !after || before.projectId !== after.projectId) return false;
-		const sessionIds = Object.keys(before.sessions);
-		return (
-			sessionIds.length === Object.keys(after.sessions).length &&
-			sessionIds.every((sessionId) => before.sessions[sessionId] === after.sessions[sessionId])
-		);
-	});
-}
-
-function withoutSessionActivity(
-	s: AppState,
-	workspaceId: string,
-	sessionId: string,
-): Pick<AppState, "activityByWorkspace"> {
-	const current = s.activityByWorkspace[workspaceId];
-	if (!current) return { activityByWorkspace: s.activityByWorkspace };
-	const sessions = omitKey(current.sessions, sessionId);
-	return {
-		activityByWorkspace:
-			Object.keys(sessions).length === 0
-				? omitKey(s.activityByWorkspace, workspaceId)
-				: { ...s.activityByWorkspace, [workspaceId]: { ...current, sessions } },
-	};
 }
 
 function appendLayoutIntent(intents: LayoutIntent[], input: LayoutIntentInput): LayoutIntent[] {
@@ -1414,8 +1434,14 @@ function withoutChat(
 	const inHistory = closed.some((chat) => chat.sessionId === sessionId);
 	const hasRuntime = s.sessions[sessionId] !== undefined;
 	const hasResources = s.resourceSnapshots[workspaceId]?.[sessionId] !== undefined;
+	const hasHostState = s.sessionStateByWorkspace[workspaceId]?.[sessionId] !== undefined;
+	const hasStateTick = Object.hasOwn(s.sessionStateTickBySession, sessionId);
+	const hasActivationTick = Object.hasOwn(s.directChatActivationTickBySession, sessionId);
+	const hasActivatedCompletion = Object.hasOwn(s.directActivatedCompletionBySession, sessionId);
+	const hasPendingActivation = Object.hasOwn(s.pendingDirectChatActivationBySession, sessionId);
+	const hasRenderedCompletion = Object.hasOwn(s.renderedCompletionBySession, sessionId);
+	const isObscured = Boolean(s.obscuredChatSessions[sessionId]);
 	const hasSkillBaseline = Object.hasOwn(s.skillsSyncedTickBySession, sessionId);
-	const hasActivity = s.activityByWorkspace[workspaceId]?.sessions[sessionId] !== undefined;
 	const targetsLocation =
 		s.chatLocationRequest?.workspaceId === workspaceId &&
 		s.chatLocationRequest.sessionId === sessionId;
@@ -1428,10 +1454,16 @@ function withoutChat(
 	if (
 		alreadyDeleted &&
 		sessionTabs.length === 0 &&
-		!hasActivity &&
 		!inHistory &&
 		!hasRuntime &&
 		!hasResources &&
+		!hasHostState &&
+		!hasStateTick &&
+		!hasActivationTick &&
+		!hasActivatedCompletion &&
+		!hasPendingActivation &&
+		!hasRenderedCompletion &&
+		!isObscured &&
 		!hasSkillBaseline &&
 		!targetsLocation &&
 		!targetsRoute &&
@@ -1505,7 +1537,45 @@ function withoutChat(
 					},
 				}
 			: {}),
-		...(hasActivity ? withoutSessionActivity(s, workspaceId, sessionId) : {}),
+		...(hasHostState
+			? {
+					sessionStateByWorkspace: {
+						...s.sessionStateByWorkspace,
+						[workspaceId]: omitKey(s.sessionStateByWorkspace[workspaceId] ?? {}, sessionId),
+					},
+				}
+			: {}),
+		...(hasStateTick
+			? { sessionStateTickBySession: omitKey(s.sessionStateTickBySession, sessionId) }
+			: {}),
+		...(hasActivationTick
+			? {
+					directChatActivationTickBySession: omitKey(
+						s.directChatActivationTickBySession,
+						sessionId,
+					),
+				}
+			: {}),
+		...(hasActivatedCompletion
+			? {
+					directActivatedCompletionBySession: omitKey(
+						s.directActivatedCompletionBySession,
+						sessionId,
+					),
+				}
+			: {}),
+		...(hasPendingActivation
+			? {
+					pendingDirectChatActivationBySession: omitKey(
+						s.pendingDirectChatActivationBySession,
+						sessionId,
+					),
+				}
+			: {}),
+		...(hasRenderedCompletion
+			? { renderedCompletionBySession: omitKey(s.renderedCompletionBySession, sessionId) }
+			: {}),
+		...(isObscured ? { obscuredChatSessions: omitKey(s.obscuredChatSessions, sessionId) } : {}),
 		...(hasSkillBaseline
 			? { skillsSyncedTickBySession: omitKey(s.skillsSyncedTickBySession, sessionId) }
 			: {}),
@@ -1527,6 +1597,13 @@ function sameReviewSnapshot(prev: ReviewSnapshot | undefined, next: ReviewSnapsh
 	return prev !== undefined && JSON.stringify(prev) === JSON.stringify(next);
 }
 
+function sameSessionStateRecord(
+	previous: SessionStateRecord | undefined,
+	next: SessionStateRecord,
+): boolean {
+	return previous !== undefined && JSON.stringify(previous) === JSON.stringify(next);
+}
+
 const EXT_UI_ORPHAN_LIMIT = 64;
 const REPLAYABLE_EXT_UI: ReadonlySet<ExtUiRequest["kind"]> = new Set([
 	"notify",
@@ -1535,10 +1612,35 @@ const REPLAYABLE_EXT_UI: ReadonlySet<ExtUiRequest["kind"]> = new Set([
 	"setTitle",
 ]);
 
+function isDialogRequest(
+	request: ExtUiRequest,
+): request is Extract<ExtUiRequest, { kind: "select" | "confirm" | "input" | "editor" }> {
+	return (
+		request.kind === "select" ||
+		request.kind === "confirm" ||
+		request.kind === "input" ||
+		request.kind === "editor"
+	);
+}
+
+function dialogIsAuthorized(
+	state: SessionState | null | undefined,
+	request: ExtUiRequest,
+): boolean {
+	return (
+		isDialogRequest(request) &&
+		state?.needsInput?.kind === "dialog" &&
+		state.needsInput.request.id === request.id
+	);
+}
+
 function bufferExtUiOrphan(s: AppState, request: ExtUiRequest): Partial<AppState> {
-	return REPLAYABLE_EXT_UI.has(request.kind)
-		? { extUiOrphans: [...s.extUiOrphans, request].slice(-EXT_UI_ORPHAN_LIMIT) }
-		: {};
+	const stateAuthorizesDialog = Object.values(s.sessionStateByWorkspace).some((records) =>
+		dialogIsAuthorized(records[request.sessionId]?.state, request),
+	);
+	if (!REPLAYABLE_EXT_UI.has(request.kind) && !stateAuthorizesDialog) return {};
+	if (s.extUiOrphans.some((frame) => frame.id === request.id)) return {};
+	return { extUiOrphans: [...s.extUiOrphans, request].slice(-EXT_UI_ORPHAN_LIMIT) };
 }
 
 function replayExtUiOrphans(
@@ -1547,8 +1649,14 @@ function replayExtUiOrphans(
 	get: () => AppState,
 ): void {
 	if (!get().sessions[sessionId]) return;
-	const replay = get().extUiOrphans.filter((frame) => frame.sessionId === sessionId);
-	if (replay.length === 0) return;
+	const state = Object.values(get().sessionStateByWorkspace).find(
+		(records) => records[sessionId] !== undefined,
+	)?.[sessionId]?.state;
+	const sessionFrames = get().extUiOrphans.filter((frame) => frame.sessionId === sessionId);
+	if (sessionFrames.length === 0) return;
+	const replay = sessionFrames.filter(
+		(frame) => !isDialogRequest(frame) || dialogIsAuthorized(state, frame),
+	);
 	set((s) => ({ extUiOrphans: s.extUiOrphans.filter((frame) => frame.sessionId !== sessionId) }));
 	for (const frame of replay) get().applyExtUi(frame);
 }
@@ -1701,11 +1809,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 	recentProjects: [],
 	workspaces: {},
 	removedWorkspaceIds: Object.create(null) as Record<string, true>,
-	activityByWorkspace: Object.create(null) as Record<string, WorkspaceActivity>,
 	expandedProjectIds: Object.create(null) as Record<string, true>,
 	selectedProjectId: null,
 	activeWorkspaceId: null,
 	workspaceSelectionHistory: [],
+	pendingWorkspaceChatActivation: null,
 	routeChatTarget: null,
 	routeChatTargetGeneration: 0,
 	workbenchFrame: null,
@@ -1727,6 +1835,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 	terminalsByWorkspace: {},
 	activeTerminalByWorkspace: {},
 	sessions: {},
+	sessionStateByWorkspace: {},
+	sessionStateClock: 0,
+	sessionStateTickBySession: {},
+	sessionStateSnapshotInstalled: false,
+	directChatActivationTickBySession: {},
+	directActivatedCompletionBySession: {},
+	pendingDirectChatActivationBySession: {},
+	renderedCompletionBySession: {},
+	obscuredChatSessions: {},
 	extUiOrphans: [],
 	models: [],
 	providerVersion: 0,
@@ -1858,6 +1975,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 			resourceSnapshots: staleChatResources(state.resourceSnapshots),
 			connectionGeneration:
 				status === "connected" ? state.connectionGeneration + 1 : state.connectionGeneration,
+			pendingWorkspaceChatActivation: null,
+			sessionStateSnapshotInstalled: false,
+			pendingDirectChatActivationBySession: {},
 		})),
 	installWelcomeSnapshot: (
 		protocolVersion,
@@ -1966,9 +2086,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 				workspaceSelectionHistory: state.workspaceSelectionHistory.filter(
 					(id) => id !== workspaceId,
 				),
+				pendingWorkspaceChatActivation:
+					state.pendingWorkspaceChatActivation === workspaceId
+						? null
+						: state.pendingWorkspaceChatActivation,
 				fsChangesByWorkspace: omitKey(state.fsChangesByWorkspace, workspaceId),
-				activityByWorkspace: omitKey(state.activityByWorkspace, workspaceId),
 				resourceSnapshots: omitKey(state.resourceSnapshots, workspaceId),
+				sessionStateByWorkspace: omitKey(state.sessionStateByWorkspace, workspaceId),
 				skillChangeTickByWorkspace: omitKey(state.skillChangeTickByWorkspace, workspaceId),
 				specsByWorkspace: omitKey(state.specsByWorkspace, workspaceId),
 				diffScopeByWorkspace: omitKey(state.diffScopeByWorkspace, workspaceId),
@@ -1991,7 +2115,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 		s.removeWorkspace(projectId, workspaceId);
 		s.clearWorkspaceTabs(workspaceId);
 		if (wasActive) {
-			if (fallbackWorkspace) s.activateWorkspace(fallbackWorkspace);
+			if (fallbackWorkspace) set((state) => workspaceActivationPatch(state, fallbackWorkspace));
 			else s.selectProject(projectId);
 			toast.info(`Workspace "${name ?? "?"}" was removed`);
 		}
@@ -2000,6 +2124,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 		set((state) => ({
 			selectedProjectId,
 			activeWorkspaceId: null,
+			pendingWorkspaceChatActivation: null,
 			...(opts?.reveal
 				? { expandedProjectIds: withExpandedProject(state.expandedProjectIds, selectedProjectId) }
 				: {}),
@@ -2020,20 +2145,33 @@ export const useAppStore = create<AppState>((set, get) => ({
 			expandedProjectIds: Object.fromEntries(projectIds.map((id) => [id, true as const])),
 		})),
 	selectMain: () =>
-		set({ selectedProjectId: null, activeWorkspaceId: null, routeChatTarget: null }),
-	activateWorkspace: (workspace) =>
-		set((state) =>
-			state.removedWorkspaceIds[workspace.id]
-				? {}
-				: {
-						selectedProjectId: workspace.projectId,
-						activeWorkspaceId: workspace.id,
-						workspaceSelectionHistory: withWorkspaceSelected(
-							state.workspaceSelectionHistory,
-							workspace.id,
-						),
-					},
-		),
+		set({
+			selectedProjectId: null,
+			activeWorkspaceId: null,
+			pendingWorkspaceChatActivation: null,
+			routeChatTarget: null,
+		}),
+	activateWorkspace: (workspace) => {
+		if (get().removedWorkspaceIds[workspace.id]) return;
+		set((state) => ({
+			...workspaceActivationPatch(state, workspace),
+			pendingWorkspaceChatActivation: workspace.id,
+		}));
+		get().consumeWorkspaceChatActivation(workspace.id);
+	},
+	consumeWorkspaceChatActivation: (workspaceId) => {
+		const state = get();
+		if (
+			state.activeWorkspaceId !== workspaceId ||
+			state.pendingWorkspaceChatActivation !== workspaceId
+		) {
+			return;
+		}
+		const active = selectAttentionCenterTab(state, workspaceId);
+		if (!active) return;
+		set({ pendingWorkspaceChatActivation: null });
+		if (active.kind === "chat") get().noteDirectChatActivation(active.sessionId);
+	},
 	activateWorkspaceFromRoute: (workspace, sessionId) =>
 		set((state) => {
 			if (state.removedWorkspaceIds[workspace.id]) return {};
@@ -2042,6 +2180,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 				...advanced.patch,
 				selectedProjectId: workspace.projectId,
 				activeWorkspaceId: workspace.id,
+				pendingWorkspaceChatActivation: null,
 				workspaceSelectionHistory: withWorkspaceSelected(
 					state.workspaceSelectionHistory,
 					workspace.id,
@@ -2068,7 +2207,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 		}),
 	clearRouteChatTarget: () =>
 		set((state) => (state.routeChatTarget ? { routeChatTarget: null } : state)),
-	hydrateLocalLayoutState: (payload) =>
+	hydrateLocalLayoutState: (payload) => {
 		set((state) =>
 			state.layoutStateReady
 				? {}
@@ -2080,8 +2219,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 						localLayoutPreferences: payload.preferences,
 						layoutStateReady: true,
 					},
-		),
-	applyLocalLayoutState: (payload, invalidateProjection = false) =>
+		);
+		const pending = get().pendingWorkspaceChatActivation;
+		if (pending) get().consumeWorkspaceChatActivation(pending);
+	},
+	applyLocalLayoutState: (payload, invalidateProjection = false) => {
 		set((state) => ({
 			workbenchFrame: payload.frame,
 			workspaceViewsByWorkspace: payload.viewsByWorkspace,
@@ -2089,9 +2231,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 			layoutAttentionByWorkspace: payload.attentionByWorkspace,
 			localLayoutPreferences: payload.preferences,
 			layoutProjectionEpoch: state.layoutProjectionEpoch + (invalidateProjection ? 1 : 0),
-		})),
+		}));
+		const pending = get().pendingWorkspaceChatActivation;
+		if (pending) get().consumeWorkspaceChatActivation(pending);
+	},
 	setLocalLayoutPreferences: (preferences) => set({ localLayoutPreferences: preferences }),
-	setLayoutAttention: (workspaceId, attention) =>
+	setLayoutAttention: (workspaceId, attention) => {
 		set((state) =>
 			state.removedWorkspaceIds[workspaceId]
 				? {}
@@ -2101,7 +2246,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 							[workspaceId]: attention,
 						},
 					},
-		),
+		);
+		get().consumeWorkspaceChatActivation(workspaceId);
+	},
 	syncLegacySelection: (workspaceId, selection) =>
 		set((state) => {
 			if (state.removedWorkspaceIds[workspaceId]) return {};
@@ -2704,7 +2851,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 				sessions: fresh
 					? {
 							...s.sessions,
-							[sessionId]: newRuntime(model, thinkingLevel, s.connectionGeneration),
+							[sessionId]: {
+								...newRuntime(model, thinkingLevel, s.connectionGeneration),
+								hostState: s.sessionStateByWorkspace[workspaceId]?.[sessionId]?.state ?? null,
+							},
 						}
 					: s.sessions,
 				...(fresh
@@ -2780,6 +2930,162 @@ export const useAppStore = create<AppState>((set, get) => ({
 				}
 			}
 			return next;
+		}),
+	installSessionStateSnapshot: (records) =>
+		set((s) => {
+			const sessionStateByWorkspace: Record<string, Record<string, SessionStateRecord>> = {};
+			const stateBySession = new Map<string, SessionState>();
+			for (const record of records) {
+				if (
+					s.removedWorkspaceIds[record.workspaceId] ||
+					isSessionDeleted(s, record.workspaceId, record.sessionId)
+				) {
+					continue;
+				}
+				const workspaceStates = sessionStateByWorkspace[record.workspaceId] ?? {};
+				workspaceStates[record.sessionId] = record;
+				sessionStateByWorkspace[record.workspaceId] = workspaceStates;
+				stateBySession.set(record.sessionId, record.state);
+			}
+			const sessions = Object.fromEntries(
+				Object.entries(s.sessions).map(([sessionId, runtime]) => [
+					sessionId,
+					withHostState(runtime, stateBySession.get(sessionId) ?? null),
+				]),
+			);
+			const extUiOrphans = s.extUiOrphans.filter(
+				(frame) =>
+					!isDialogRequest(frame) || dialogIsAuthorized(stateBySession.get(frame.sessionId), frame),
+			);
+			const sessionStateClock = s.sessionStateClock + 1;
+			const sessionStateTickBySession = Object.fromEntries(
+				[...stateBySession.keys()].map((sessionId) => [sessionId, sessionStateClock]),
+			);
+			const directActivatedCompletionBySession = {
+				...s.directActivatedCompletionBySession,
+			};
+			for (const sessionId of Object.keys(s.pendingDirectChatActivationBySession)) {
+				const state = stateBySession.get(sessionId);
+				const completionId = state?.completionUnread ? state.completion?.completionId : undefined;
+				if (completionId) directActivatedCompletionBySession[sessionId] = completionId;
+			}
+			return {
+				sessionStateByWorkspace,
+				sessions,
+				extUiOrphans,
+				sessionStateClock,
+				sessionStateTickBySession,
+				sessionStateSnapshotInstalled: true,
+				directActivatedCompletionBySession,
+				pendingDirectChatActivationBySession: {},
+			};
+		}),
+	applySessionState: (record) =>
+		set((s) => {
+			if (
+				s.removedWorkspaceIds[record.workspaceId] ||
+				isSessionDeleted(s, record.workspaceId, record.sessionId)
+			) {
+				return {};
+			}
+			const workspaceStates = s.sessionStateByWorkspace[record.workspaceId] ?? {};
+			const runtime = s.sessions[record.sessionId];
+			const extUiOrphans = s.extUiOrphans.filter(
+				(frame) =>
+					frame.sessionId !== record.sessionId ||
+					!isDialogRequest(frame) ||
+					dialogIsAuthorized(record.state, frame),
+			);
+			const orphansChanged = extUiOrphans.length !== s.extUiOrphans.length;
+			if (sameSessionStateRecord(workspaceStates[record.sessionId], record)) {
+				if ((!runtime || runtime.hostState === record.state) && !orphansChanged) return {};
+				return {
+					...(runtime && runtime.hostState !== record.state
+						? {
+								sessions: {
+									...s.sessions,
+									[record.sessionId]: withHostState(runtime, record.state),
+								},
+							}
+						: {}),
+					...(orphansChanged ? { extUiOrphans } : {}),
+				};
+			}
+			const sessionStateClock = s.sessionStateClock + 1;
+			return {
+				sessionStateClock,
+				sessionStateTickBySession: {
+					...s.sessionStateTickBySession,
+					[record.sessionId]: sessionStateClock,
+				},
+				sessionStateByWorkspace: {
+					...s.sessionStateByWorkspace,
+					[record.workspaceId]: { ...workspaceStates, [record.sessionId]: record },
+				},
+				...(orphansChanged ? { extUiOrphans } : {}),
+				...(runtime
+					? {
+							sessions: {
+								...s.sessions,
+								[record.sessionId]: withHostState(runtime, record.state),
+							},
+						}
+					: {}),
+			};
+		}),
+	noteDirectChatActivation: (sessionId) =>
+		set((s) => {
+			if (s.obscuredChatSessions[sessionId]) return {};
+			const sessionStateClock = s.sessionStateClock + 1;
+			const record = Object.values(s.sessionStateByWorkspace).find(
+				(records) => records[sessionId] !== undefined,
+			)?.[sessionId];
+			const completionId = record?.state.completionUnread
+				? record.state.completion?.completionId
+				: undefined;
+			return {
+				sessionStateClock,
+				directChatActivationTickBySession: {
+					...s.directChatActivationTickBySession,
+					[sessionId]: sessionStateClock,
+				},
+				...(completionId
+					? {
+							directActivatedCompletionBySession: {
+								...s.directActivatedCompletionBySession,
+								[sessionId]: completionId,
+							},
+						}
+					: {}),
+				...(!s.sessionStateSnapshotInstalled
+					? {
+							pendingDirectChatActivationBySession: {
+								...s.pendingDirectChatActivationBySession,
+								[sessionId]: true,
+							},
+						}
+					: {}),
+			};
+		}),
+	noteRenderedCompletion: (sessionId, completionId) =>
+		set((s) => {
+			if (s.sessions[sessionId]?.hostState?.completion?.completionId !== completionId) return {};
+			if (s.renderedCompletionBySession[sessionId] === completionId) return {};
+			return {
+				renderedCompletionBySession: {
+					...s.renderedCompletionBySession,
+					[sessionId]: completionId,
+				},
+			};
+		}),
+	setChatObscured: (sessionId, obscured) =>
+		set((s) => {
+			if (obscured === Boolean(s.obscuredChatSessions[sessionId])) return {};
+			return {
+				obscuredChatSessions: obscured
+					? { ...s.obscuredChatSessions, [sessionId]: true }
+					: omitKey(s.obscuredChatSessions, sessionId),
+			};
 		}),
 	reopenChat: (wsId, sessionId, options = {}) =>
 		set((s) => {
@@ -2880,39 +3186,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 						: s.previewTabByWorkspace,
 			};
 		}),
-	hydrateSessionActivity: (rows) =>
-		set((s) => {
-			const next: Record<string, WorkspaceActivity> = Object.create(null);
-			for (const row of rows) {
-				if (s.removedWorkspaceIds[row.workspaceId]) continue;
-				if (isSessionDeleted(s, row.workspaceId, row.sessionId)) continue;
-				const forWorkspace =
-					next[row.workspaceId] ??
-					({ projectId: row.projectId, sessions: Object.create(null) } as WorkspaceActivity);
-				forWorkspace.sessions[row.sessionId] = row.status;
-				next[row.workspaceId] = forWorkspace;
-			}
-			return sameActivityMap(s.activityByWorkspace, next) ? {} : { activityByWorkspace: next };
-		}),
-	applySessionActivity: ({ workspaceId, projectId, sessionId, status }) =>
-		set((s) => {
-			if (s.removedWorkspaceIds[workspaceId]) return {};
-			const current = s.activityByWorkspace[workspaceId];
-			if (status === null || isSessionDeleted(s, workspaceId, sessionId)) {
-				if (current?.sessions[sessionId] === undefined) return {};
-				return withoutSessionActivity(s, workspaceId, sessionId);
-			}
-			if (current?.sessions[sessionId] === status && current.projectId === projectId) return {};
-			return {
-				activityByWorkspace: {
-					...s.activityByWorkspace,
-					[workspaceId]: {
-						projectId,
-						sessions: { ...current?.sessions, [sessionId]: status },
-					},
-				},
-			};
-		}),
 	noteClosedChats: (workspaceId, entries) =>
 		set((s) => {
 			if (s.removedWorkspaceIds[workspaceId]) return {};
@@ -2968,6 +3241,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 				toolResults: hydrated.toolResults,
 				askAnswers: hydrated.askAnswers,
 				isStreaming: summary.isStreaming,
+				hostState:
+					summary.state ??
+					s.sessionStateByWorkspace[summary.workspaceId]?.[summary.sessionId]?.state ??
+					null,
 				...(summary.queue ? { queue: summary.queue } : {}),
 				...(hydrated.turnIdByMessageIndex
 					? { turnIdByMessageIndex: hydrated.turnIdByMessageIndex }
@@ -3062,6 +3339,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 				queue: summary.queue ?? EMPTY_QUEUE,
 				model: summary.model,
 				thinkingLevel: summary.thinkingLevel,
+				hostState:
+					summary.state ??
+					s.sessionStateByWorkspace[summary.workspaceId]?.[summary.sessionId]?.state ??
+					current.hostState,
 				eventRevision: current.eventRevision + 1,
 				syncedConnectionGeneration: Math.max(
 					current.syncedConnectionGeneration,
@@ -3282,6 +3563,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 				},
 				selectedProjectId: req.projectId,
 				activeWorkspaceId: req.workspaceId,
+				pendingWorkspaceChatActivation: null,
 				workspaceSelectionHistory: withWorkspaceSelected(
 					state.workspaceSelectionHistory,
 					req.workspaceId,

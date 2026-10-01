@@ -4,9 +4,9 @@ import type {
 	HostPlatform,
 	HostUpdateNotice,
 	ServerWelcome,
-	SessionActivityPayload,
 	SessionCreatedPayload,
 	SessionDeletedPayload,
+	SessionStateRecord,
 	TerminalTabsPush,
 	WorkspaceFsChangedPayload,
 } from "@thinkrail/contracts";
@@ -19,24 +19,23 @@ import { errorCodeOf } from "@thinkrail/shared/codedError";
 import {
 	disposeAllSessions,
 	getSessionWorkspaceId,
+	initializeSessionStates,
 	isProjectSkillPath,
 	refreshAgentReviewTool,
 	refreshSubagentTools,
-	setActivityProjectResolver,
 	setAgentReviewEnabledResolver,
-	setExtUiPendingObserver,
 	setExtUiPublisher,
 	setReviewCommentHandler,
-	setSessionActivityPublisher,
 	setSessionCreatedPublisher,
 	setSessionDeletedPublisher,
+	setSessionProjectResolver,
 	setSessionPublisher,
 	setSessionResourcesPublisher,
+	setSessionStatePublisher,
 	setSkillAdmissionResolver,
 	setSubagentsEnabledResolver,
 	setTitleToolHost,
 	settleSessionsForShutdown,
-	syncSessionActivity,
 } from "../agent";
 import {
 	type AnalyticsOptions,
@@ -184,6 +183,21 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 		hostUpdate,
 	} = options;
 
+	setSessionProjectResolver((workspaceId) => {
+		try {
+			return getWorkspace(workspaceId).projectId;
+		} catch {
+			return null;
+		}
+	});
+	await initializeSessionStates(
+		loadWorkspaces().map((workspace) => ({
+			id: workspace.id,
+			projectId: workspace.projectId,
+			cwd: workspace.worktreePath,
+		})),
+	);
+
 	const sockets = new Map<string, Bun.ServerWebSocket<SocketData>>();
 	const reapTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	const requestReplays = new RequestReplayCache<string>();
@@ -251,8 +265,8 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 				ws.subscribe(WS_CHANNELS.piExtensionUi);
 				ws.subscribe(WS_CHANNELS.sessionCreated);
 				ws.subscribe(WS_CHANNELS.sessionDeleted);
-				ws.subscribe(WS_CHANNELS.sessionActivity);
 				ws.subscribe(WS_CHANNELS.sessionResourcesChanged);
+				ws.subscribe(WS_CHANNELS.sessionState);
 				ws.subscribe(WS_CHANNELS.providerLogin);
 				ws.subscribe(WS_CHANNELS.providerChanged);
 				ws.subscribe(WS_CHANNELS.projectUpdated);
@@ -470,14 +484,6 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 		}
 	});
 
-	setActivityProjectResolver((workspaceId) => {
-		try {
-			return getWorkspace(workspaceId).projectId;
-		} catch {
-			return null;
-		}
-	});
-
 	setSkillAdmissionResolver((workspaceId) => {
 		try {
 			const { projectId, skillOverrides } = getWorkspace(workspaceId);
@@ -606,6 +612,13 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 		);
 	});
 
+	setSessionStatePublisher((record: SessionStateRecord) => {
+		server.publish(
+			WS_CHANNELS.sessionState,
+			JSON.stringify({ channel: WS_CHANNELS.sessionState, data: record }),
+		);
+	});
+
 	setSessionDeletedPublisher((payload: SessionDeletedPayload) => {
 		runObservation.forget(payload.sessionId);
 		taskObservation.forget(payload.sessionId);
@@ -621,15 +634,6 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 			JSON.stringify({ channel: WS_CHANNELS.sessionResourcesChanged, data: payload }),
 		);
 	});
-
-	setSessionActivityPublisher((payload: SessionActivityPayload) => {
-		server.publish(
-			WS_CHANNELS.sessionActivity,
-			JSON.stringify({ channel: WS_CHANNELS.sessionActivity, data: payload }),
-		);
-	});
-
-	setExtUiPendingObserver(syncSessionActivity);
 
 	setSessionPublisher((payload) => {
 		runObservation.observe(payload.sessionId, payload.event);

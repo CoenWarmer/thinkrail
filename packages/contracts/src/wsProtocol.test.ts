@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ReviewFixDetails } from "./domain";
 import {
-	ACTIVITY_PROTOCOL_VERSION,
 	AGENT_REVIEW_SETTING_PROTOCOL_VERSION,
 	ANALYTICS_CONSENT_PROTOCOL_VERSION,
 	CHAT_RESOURCES_PROTOCOL_VERSION,
@@ -17,6 +16,7 @@ import {
 	PROJECT_TEMPLATE_PREVIEW_PROTOCOL_VERSION,
 	PROTOCOL_VERSION,
 	SESSION_RENAME_PROTOCOL_VERSION,
+	SESSION_STATE_PROTOCOL_VERSION,
 	SESSION_TITLE_MAX_LENGTH,
 	SUBAGENT_SETTINGS_PROTOCOL_VERSION,
 	THEME_SYSTEM_PROTOCOL_VERSION,
@@ -26,11 +26,9 @@ import {
 	WS_METHODS,
 } from "./wsProtocol";
 
-test("workspace activity advances the protocol and names its channel and snapshot read", () => {
-	expect(ACTIVITY_PROTOCOL_VERSION).toBe(60);
-	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(ACTIVITY_PROTOCOL_VERSION);
-	expect(WS_CHANNELS.sessionActivity).toBe("session.activity");
+test("retired workspace activity keeps only its empty snapshot compatibility method", () => {
 	expect(WS_METHODS.sessionActivityList).toBe("session.activityList");
+	expect(Object.hasOwn(WS_CHANNELS, "sessionActivity")).toBe(false);
 });
 
 test("system theme settings advance the protocol", () => {
@@ -79,6 +77,15 @@ test("session rename is versioned and bounded", () => {
 	expect(WS_METHODS.sessionRename).toBe("session.rename");
 });
 
+test("normalized session state advances the protocol and names one snapshot/push channel", () => {
+	expect(SESSION_STATE_PROTOCOL_VERSION).toBe(73);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(SESSION_STATE_PROTOCOL_VERSION);
+	expect(WS_METHODS.sessionStateList).toBe("session.stateList");
+	expect(WS_METHODS.sessionAcknowledgeCompletion).toBe("session.acknowledgeCompletion");
+	expect(WS_METHODS.sessionNudge).toBe("session.nudge");
+	expect(WS_CHANNELS.sessionState).toBe("session.state");
+});
+
 test("session titles normalize to one bounded non-blank line", () => {
 	expect(normalizeSessionTitle("  Fix auth\r\nredirect  ")).toBe("Fix auth redirect");
 	expect(normalizeSessionTitle(" \n ")).toBeNull();
@@ -107,8 +114,8 @@ test("auto plan-summary generation advances the protocol to v69", () => {
 });
 
 test("host-owned new-chat defaults are pinned to v72", () => {
-	expect(PROTOCOL_VERSION).toBe(72);
 	expect(DEFAULT_MODEL_PROTOCOL_VERSION).toBe(72);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(DEFAULT_MODEL_PROTOCOL_VERSION);
 	expect(WS_METHODS.modelDefault).toBe("model.default");
 	expect(WS_METHODS).not.toHaveProperty("modelSetDefault");
 });

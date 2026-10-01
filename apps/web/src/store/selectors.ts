@@ -1,12 +1,14 @@
 import {
-	type ActivityStatus,
 	ANALYTICS_CONSENT_PROTOCOL_VERSION,
 	type BackgroundCommandSummary,
 	CHAT_RESOURCES_PROTOCOL_VERSION,
 	type GitDiffScope,
 	type Project,
 	SESSION_RENAME_PROTOCOL_VERSION,
+	SESSION_STATE_PROTOCOL_VERSION,
 	type SessionResources,
+	type SessionState,
+	type SessionStateRecord,
 	type SpecGraphNode,
 	type SubagentResourceSummary,
 	type WireModel,
@@ -31,7 +33,6 @@ import type {
 	RouteChatTarget,
 	SessionRuntime,
 	TerminalTab,
-	WorkspaceActivity,
 } from "./appStore";
 import type { ChatResourceRead, ChatResourceScope, ChatResourceState } from "./chatResources";
 
@@ -195,6 +196,98 @@ export function selectChatResourceGroups(snapshot: SessionResources | null | und
 		finishedSubagents,
 		activeCount: commands.length + subagents.length,
 	};
+}
+
+export function selectHasNormalizedSessionState(state: ProtocolState): boolean {
+	return state.protocolVersion !== null && state.protocolVersion >= SESSION_STATE_PROTOCOL_VERSION;
+}
+
+interface SessionStateProjection {
+	sessionStateByWorkspace: Record<string, Record<string, SessionStateRecord>>;
+}
+
+export function selectSessionState(
+	state: SessionStateProjection,
+	workspaceId: string,
+	sessionId: string,
+): SessionState | null {
+	return state.sessionStateByWorkspace[workspaceId]?.[sessionId]?.state ?? null;
+}
+
+export function selectWorkspaceNeedsAttention(
+	state: SessionStateProjection,
+	workspaceId: string,
+): boolean {
+	return Object.values(state.sessionStateByWorkspace[workspaceId] ?? {}).some(
+		(record) => record.state.needsInput !== null || record.state.completionUnread,
+	);
+}
+
+export function selectWorkspaceIsRunning(
+	state: SessionStateProjection,
+	workspaceId: string,
+): boolean {
+	return Object.values(state.sessionStateByWorkspace[workspaceId] ?? {}).some(
+		(record) => record.state.execution === "running",
+	);
+}
+
+export function selectProjectNeedsAttention(
+	state: SessionStateProjection,
+	projectId: string,
+): boolean {
+	return Object.values(state.sessionStateByWorkspace).some((records) =>
+		Object.values(records).some(
+			(record) =>
+				record.projectId === projectId &&
+				(record.state.needsInput !== null || record.state.completionUnread),
+		),
+	);
+}
+
+export function selectProjectIsRunning(state: SessionStateProjection, projectId: string): boolean {
+	return Object.values(state.sessionStateByWorkspace).some((records) =>
+		Object.values(records).some(
+			(record) => record.projectId === projectId && record.state.execution === "running",
+		),
+	);
+}
+
+interface CompletionActivationState extends SessionStateProjection {
+	status: string;
+	connectionGeneration: number;
+	sessions: Record<string, SessionRuntime>;
+	sessionStateTickBySession: Record<string, number>;
+	directChatActivationTickBySession: Record<string, number>;
+	directActivatedCompletionBySession: Record<string, string>;
+	renderedCompletionBySession: Record<string, string>;
+}
+
+export function selectReadyCompletionActivation(
+	state: CompletionActivationState,
+	workspaceId: string,
+	sessionId: string,
+): string | null {
+	const record = state.sessionStateByWorkspace[workspaceId]?.[sessionId];
+	const completion = record?.state.completion;
+	const runtime = state.sessions[sessionId];
+	const directlyActivated =
+		state.directActivatedCompletionBySession[sessionId] === completion?.completionId;
+	if (
+		state.status !== "connected" ||
+		!completion ||
+		!record.state.completionUnread ||
+		!runtime ||
+		runtime.syncedConnectionGeneration !== state.connectionGeneration ||
+		runtime.hostState?.completion?.completionId !== completion.completionId ||
+		state.renderedCompletionBySession[sessionId] !== completion.completionId ||
+		(!directlyActivated &&
+			(state.directChatActivationTickBySession[sessionId] ?? 0) <=
+				(state.sessionStateTickBySession[sessionId] ?? 0))
+	) {
+		return null;
+	}
+	return completion.completionId;
 }
 
 interface ActiveWorkspaceState {
@@ -618,46 +711,4 @@ export function selectAgentReviewCommentCount(
 	return snapshot.comments.filter(
 		(c) => c.author === "agent" && c.status !== "resolved" && c.status !== "dismissed",
 	).length;
-}
-
-export const ACTIVITY_STATUS_ORDER: readonly ActivityStatus[] = [
-	"waiting",
-	"running",
-	"failed",
-	"queued",
-];
-
-export type ActivityMap = Record<string, WorkspaceActivity>;
-
-export interface ActivityRollup {
-	status: ActivityStatus;
-	counts: Partial<Record<ActivityStatus, number>>;
-}
-
-function rollUp(records: Iterable<Record<string, ActivityStatus>>): ActivityRollup | null {
-	const counts: Partial<Record<ActivityStatus, number>> = {};
-	for (const record of records) {
-		for (const status of Object.values(record)) counts[status] = (counts[status] ?? 0) + 1;
-	}
-	const status = ACTIVITY_STATUS_ORDER.find((candidate) => (counts[candidate] ?? 0) > 0);
-	return status ? { status, counts } : null;
-}
-
-export function workspaceActivityRollup(
-	activityByWorkspace: ActivityMap,
-	workspaceId: string,
-): ActivityRollup | null {
-	const entry = activityByWorkspace[workspaceId];
-	return entry ? rollUp([entry.sessions]) : null;
-}
-
-export function projectActivityRollup(
-	activityByWorkspace: ActivityMap,
-	projectId: string,
-): ActivityRollup | null {
-	const records: Record<string, ActivityStatus>[] = [];
-	for (const entry of Object.values(activityByWorkspace)) {
-		if (entry.projectId === projectId) records.push(entry.sessions);
-	}
-	return rollUp(records);
 }

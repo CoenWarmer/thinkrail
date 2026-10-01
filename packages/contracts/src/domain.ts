@@ -1,12 +1,10 @@
-import type { ThinkingLevel, WireModel } from "./piProtocol";
+import type { SessionState, ThinkingLevel, WireModel } from "./piProtocol";
 
-export type ActivityStatus = "running" | "waiting" | "queued" | "failed";
-
-export interface SessionActivity {
+export interface SessionStateRecord {
 	sessionId: string;
 	workspaceId: string;
 	projectId: string;
-	status: ActivityStatus;
+	state: SessionState;
 }
 
 export interface Project {

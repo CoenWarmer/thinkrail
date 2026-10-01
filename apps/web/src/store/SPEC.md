@@ -94,7 +94,7 @@ selected-log state belong to chat integration, not domain persistence. See
   leaving the client labelling and keying reads off a value the host no longer has; a project never fetched or an id absent from its list is a **no-op** — the next
   `workspace.list` reconciles; **`applyWorkspaceRemoved(projectId, id)`** is the **entire** removal
   reaction (`removeWorkspace` drops the row + `clearWorkspaceState` drops its
-  local view/attention/terminal/activity maps and chat runtimes + recency drops the dead id,
+  local view/attention/terminal maps and chat runtimes + recency drops the dead id,
   and **if it was this client's active workspace** → activate the most recently selected loaded workspace
   whose project remains open, even across projects; when none remains, `selectProject(projectId)` falls back
   to the removed workspace's Project Home; either active fallback gets the same neutral toast that reads right
@@ -228,43 +228,30 @@ selected-log state belong to chat integration, not domain persistence. See
   assistant turn (`removeSupersededAssistant`, the same rule as the overflow-compaction path) —
   otherwise the client renders the reply twice (frozen failed partial + retried copy). Hydration applies
   the same presentation rule to the persisted copy (`chat/hydrate.ts` hides retried attempts — an
-  errored assistant followed by another assistant before any user message), so live and reloaded clients
-  agree.
-  - **Workspace activity** (`activityByWorkspace`) is the host's cross-workspace agent-state signal, the one
-    thing here that describes chats **nobody has open** — the Projects rail's glyphs. Keyed workspace →
-    **`WorkspaceActivity`** (`{ projectId, sessions }`), and **idle is absence at every level**: a retraction
-    deletes the session key and then the workspace key once it empties, so "quiet" is an empty map rather
-    than a map full of nulls. Each entry carries its **own `projectId`** rather than looking one up in
-    `workspaces`: that list is fetched only for *expanded* projects, so a rollup that depended on it would
-    return nothing for the collapsed, never-opened project whose activity the rail most needs to show. A
-    workspace re-attributed to another project replaces its entry, so it is never counted under both.
-    A status that did not move is not a state write at all (the reducer returns the identical object), which
-    is what keeps an always-mounted rail from re-rendering on every event of every session.
-    **`applySessionActivity`** folds one `session.activity` push; **`hydrateSessionActivity`** **replaces**
-    the whole map from the `session.activityList` snapshot — replacement, not merge, because a reconnect must
-    not leave a glyph behind for a session that settled while the socket was down. Replacement is also what
-    makes an **empty** snapshot the retirement path: a client that has seen a v59 host and then reconnects
-    to a pre-activity one hydrates `[]` rather than skipping the read, because that host can send neither a
-    replacement snapshot nor a retraction, and the alternative is stale `running`/`failed` glyphs that never
-    clear. Hydration is equally a no-op when the computed map matches the current one, so a reconnect that
-    changes nothing does not re-render the rail. Both refuse removed
-    workspaces and tombstoned sessions, so a late push cannot resurrect a deleted chat's glyph.
-    The rollup is **not** stored: `workspaceActivityRollup`/`projectActivityRollup` derive it on read from
-    the map alone — no workspace list, no second store slice — with a single shared precedence, the
-    exported **`ACTIVITY_STATUS_ORDER`** (`waiting` > `running` > `failed` > `queued`) — one constant that
-    both this rollup and the glyph's hover breakdown (`apps/web/src/panels/SPEC.md`) read, so the order can
-    never drift between the two — the row speaks for **live/attention work first**: a
-    chat that needs you, then one actively working. A terminal `failed` deliberately sits *below* live work
-    so it cannot paint a busy worktree red — a running sibling must not be masked by an abandoned failure;
-    the fault recedes to the hover breakdown and still owns the glyph whenever nothing live is happening.
-    (This is why a *finished-fine* sibling does **not** demote a lone failure: idle is absence, so there is
-    nothing left in the map to outrank it — that is the "idle draws nothing" invariant, not a masking bug.)
-    Note this is deliberately *not* the host's
-    per-session derivation order (see `packages/server/src/agent/SPEC.md`): there the question is "what is
-    this one chat doing", here it is "which of several chats should this row speak for". A `failed` that has
-    been *superseded* by newer non-failed work in its worktree never reaches this rollup at all — the host
-    suppresses it at the source (failed-supersession, same SPEC), so it arrives as a retraction, not a
-    status this precedence has to rank.
+  errored assistant followed by another assistant message), so live and reloaded clients agree.
+  - **Normalized session state** (`sessionStateByWorkspace`) is the full host-authored state record per
+    workspace/session. Snapshot hydration replaces the map only on a complete current-generation read;
+    ordered pushes fold one record, and deletion removes it. Shared selectors derive needs-input, working,
+    unread-finished, and project/workspace rollups—no stored precedence or second running slice.
+    `SessionRuntime.hostState` is installed with transcript hydration and by state pushes delivered after Pi
+    events. Exact completion ids let `selectReadyCompletionActivation` require current connection, rendered
+    runtime state, unread record, and direct activation of that exact unread completion. Activation records
+    the current completion id as well as its local clock, so an attach/hydration push for the same id cannot
+    erase a deliberate open while a stale activation can never clear a newer result. On a cold connection,
+    a deliberate open before the first state snapshot cannot trust the retained record, which may be absent
+    or stale after reconnect; one pending activation survives only until the ordered snapshot-plus-buffer
+    state installs, which binds its exact unread completion or drops it when the session is quiet/absent. Connection transition and chat deletion clear the pending activation, and
+    later pushes cannot inherit it. The exact result must render before acknowledgement is sent, but a
+    deliberate tab/history activation may happen first and
+    remains eligible once that row mounts—opening and reading is sufficient without a second composer
+    focus. Deliberate workspace entry also activates its already-selected chat once that chat is visible and
+    unobscured, so entering the workspace and reading does not require a second click on the chat. Passive
+    mount/visibility and background layout restoration never advance activation; chat-tab/group selection,
+    direct history/search open, an explicit Review/Plan-panel open-chat action, workspace entry, and
+    unobscured conversation pointer intent do. Workspace
+    entry arms one pending activation only until the first selected center tab converges; competing
+    navigation or any connection transition expires it, so a later background restore cannot inherit an
+    old read gesture. Incidental interactions inside an obscuring history overlay do not.
   Closed chats are reopenable: the workbench close command atomically removes local placement and invokes
   **`closeChatToHistory`**, which **keeps the runtime + host session alive**, records it in
   **`closedChatsByWorkspace`** (`ClosedChat[]`, per workspace, most-recent-first), and clears pending
@@ -280,7 +267,7 @@ selected-log state belong to chat integration, not domain persistence. See
   gaining local placement. **`deleteChat(workspaceId, sessionId)`** is the idempotent
   fold for both a confirmed local `session.delete` and the `session.deleted` broadcast: it atomically drops
   every tab the chat owns — its transcript, live plan page, and any dependent legacy document cache — plus
-  its history row/runtime + skill baseline + activity row, records a page-lifetime tombstone, removes queued opens for the
+  its history row/runtime + skill baseline, records a page-lifetime tombstone, removes queued opens for the
   chat or its dependent documents, and queues a resource-removal intent. The shell layout integration
   removes every matching chat placement and session-backed plan reference through its pure mutation path,
   then reconciles local attention in the same transition. Until then the tombstone renders no body, so a
@@ -589,11 +576,9 @@ branch's review — a commit sha means nothing in another worktree — and dropp
   (that ref *as an open diff tab's live dimension*: the target for a branch-scope tab, `""` for a
   commit/uncommitted one whose sides can't move — derived here, never re-assembled in a panel),
   `selectWorkspaceTick` (the sync-baseline snapshot), `selectWorkspaceSessionIds` (deduplicated local chat
-  placement + history membership used as a reconnect-reconciliation baseline),
-  **`workspaceActivityRollup` / `projectActivityRollup`** (the Projects rail's agent-state rollup — pure
-  functions *over* the slice rather than Zustand selectors, since a fresh rollup object returned from a
-  selector would re-render the rail on every store change; see the activity section);
-  `matchesWorktreePath` (line an agent-reported path — relative or absolute — up against a worktree-relative
+  placement + history membership used as a reconnect-reconciliation baseline), normalized session-state
+  selectors/actions (exact session + workspace/project needs-input/working/unread-finished rollups, direct
+  activation, ready exact-completion acknowledgement), `matchesWorktreePath` (line an agent-reported path — relative or absolute — up against a worktree-relative
   one; shared by the Changes deep link and the spec classifier. The suffix rule is for **absolute reports
   only** and is anchored at a separator: unanchored, `/wt/src/a-foo.ts` would match `src/foo.ts`; applied to
   relative reports, `module-b/SPEC.md` would match the *root* `SPEC.md`) + `specPathMatcher` (is a written

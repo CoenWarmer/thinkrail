@@ -27,6 +27,8 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { AttentionDot } from "@/components/AttentionDot";
+import { RunningIcon } from "@/components/RunningIcon";
 import { Button } from "@/components/ui/button";
 import {
 	ContextMenu,
@@ -46,20 +48,20 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { IconTooltip } from "@/components/ui/tooltip";
-import { copyText, platformShortcutLabel } from "@/lib";
+import { cn, copyText, platformShortcutLabel } from "@/lib";
 import { LoadingRegion } from "../components/Skeleton";
 import {
-	type ActivityRollup,
 	isDefaultWorkspace,
 	isExternalWorkspace,
-	projectActivityRollup,
 	selectActiveWorkspaceProjectId,
+	selectProjectIsRunning,
+	selectProjectNeedsAttention,
+	selectWorkspaceIsRunning,
+	selectWorkspaceNeedsAttention,
 	toast,
 	useAppStore,
-	workspaceActivityRollup,
 } from "../store";
 import { errorText, getTransport, prewarmWorkspaceSkillLoad } from "../transport";
-import { ActivityGlyph } from "./ActivityGlyph";
 import { AddProjectMenu } from "./AddProjectMenu";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ExistingWorktreeDialog } from "./ExistingWorktreeDialog";
@@ -77,8 +79,8 @@ export function ProjectTree() {
 	const workspaces = useAppStore((s) => s.workspaces);
 	const worktreeCreations = useAppStore((s) => s.worktreeCreationsByProject);
 	const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
-	const activityByWorkspace = useAppStore((s) => s.activityByWorkspace);
 	const protocolVersion = useAppStore((s) => s.protocolVersion);
+	const sessionStateByWorkspace = useAppStore((s) => s.sessionStateByWorkspace);
 
 	const [editors, setEditors] = useState<EditorInfo[]>([]);
 	useEffect(() => {
@@ -259,15 +261,17 @@ export function ProjectTree() {
 				{projects.map((project) => {
 					const isExpanded = expandedProjectIds[project.id] === true;
 					const list = workspaces[project.id];
+					const stateProjection = { sessionStateByWorkspace };
 					return (
 						<li key={project.id}>
 							<ProjectRow
 								project={project}
 								isSelected={selectedProjectId === project.id}
 								isExpanded={isExpanded}
-								activity={
-									isExpanded ? null : projectActivityRollup(activityByWorkspace, project.id)
+								needsAttention={
+									!isExpanded && selectProjectNeedsAttention(stateProjection, project.id)
 								}
+								isRunning={!isExpanded && selectProjectIsRunning(stateProjection, project.id)}
 								workspaceCount={(list ?? []).filter((w) => !isDefaultWorkspace(w)).length}
 								onToggle={() => toggleExpand(project.id)}
 								onSelect={() => void selectProject(project.id)}
@@ -288,7 +292,8 @@ export function ProjectTree() {
 											key={ws.id}
 											workspace={ws}
 											isActive={activeWorkspaceId === ws.id}
-											activity={workspaceActivityRollup(activityByWorkspace, ws.id)}
+											needsAttention={selectWorkspaceNeedsAttention(stateProjection, ws.id)}
+											isRunning={selectWorkspaceIsRunning(stateProjection, ws.id)}
 											canRename={canRenameWorkspace(protocolVersion, ws)}
 											editors={editors}
 											onSelect={() => selectWorkspace(ws)}
@@ -353,7 +358,8 @@ function ProjectRow({
 	project,
 	isSelected,
 	isExpanded,
-	activity,
+	needsAttention,
+	isRunning,
 	workspaceCount,
 	onToggle,
 	onSelect,
@@ -367,7 +373,8 @@ function ProjectRow({
 	project: Project;
 	isSelected: boolean;
 	isExpanded: boolean;
-	activity: ActivityRollup | null;
+	needsAttention: boolean;
+	isRunning: boolean;
 	workspaceCount: number;
 	onToggle: () => void;
 	onSelect: () => void;
@@ -393,7 +400,8 @@ function ProjectRow({
 		<div
 			data-testid="project-item"
 			data-menu-open={menuOpen}
-			{...(activity ? { "data-activity": activity.status } : {})}
+			data-attention={needsAttention || undefined}
+			data-running={isRunning || undefined}
 			className={`group flex h-28 items-center gap-4 rounded-[var(--radius-sm)] pr-4 pl-4 transition-colors ${
 				menuOpen ? "bg-control-bg-selected" : "hover:bg-control-bg-hovered"
 			}`}
@@ -415,14 +423,22 @@ function ProjectRow({
 				onClick={onSelect}
 				className="flex min-w-0 flex-1 items-center gap-4 text-left"
 			>
-				<Folder className={`size-14 shrink-0 ${isSelected ? "text-primary" : "text-text-muted"}`} />
+				{isRunning ? (
+					<RunningIcon className={isSelected ? "text-primary" : "text-text-muted"}>
+						<Folder className="size-14 shrink-0" />
+					</RunningIcon>
+				) : (
+					<Folder
+						className={`size-14 shrink-0 ${isSelected ? "text-primary" : "text-text-muted"}`}
+					/>
+				)}
 				<span
 					className={`truncate tr-text-ui ${isSelected ? "text-text-default" : "text-text-muted"}`}
 				>
 					{project.name}
 				</span>
 			</button>
-			{activity && <ActivityGlyph status={activity.status} counts={activity.counts} />}
+			{needsAttention ? <AttentionDot /> : null}
 			{!isExpanded && workspaceCount > 0 && (
 				<span
 					data-testid="project-workspace-count"
@@ -529,7 +545,8 @@ function ProjectRow({
 function WorkspaceRow({
 	workspace,
 	isActive,
-	activity,
+	needsAttention,
+	isRunning,
 	canRename,
 	editors,
 	onSelect,
@@ -541,7 +558,8 @@ function WorkspaceRow({
 }: {
 	workspace: Workspace;
 	isActive: boolean;
-	activity: ActivityRollup | null;
+	needsAttention: boolean;
+	isRunning: boolean;
 	canRename: boolean;
 	editors: EditorInfo[];
 	onSelect: () => void;
@@ -630,7 +648,11 @@ function WorkspaceRow({
 	};
 
 	const identityClass = `flex min-w-0 flex-1 gap-4 text-left ${isTwoLine ? "items-start" : "items-center"}`;
-	const identityIcon = (
+	const identityIcon = isRunning ? (
+		<RunningIcon className={cn(isTwoLine && "mt-2", isActive ? "text-primary" : "text-text-muted")}>
+			<Icon className="size-14 shrink-0" />
+		</RunningIcon>
+	) : (
 		<Icon
 			className={`${isTwoLine ? "mt-2 " : ""}size-14 shrink-0 ${isActive ? "text-primary" : "text-text-muted"}`}
 		/>
@@ -651,7 +673,8 @@ function WorkspaceRow({
 				data-testid="workspace-item"
 				data-active={isActive}
 				data-kind={workspace.kind ?? "worktree"}
-				{...(activity ? { "data-activity": activity.status } : {})}
+				data-attention={needsAttention || undefined}
+				data-running={isRunning || undefined}
 				onContextMenu={openMenuFromContext}
 				className={`group flex min-h-28 min-w-0 items-center gap-8 rounded-[var(--radius-sm)] border-0 py-4 pr-4 pl-24 transition-colors ${
 					isActive || menuOpen ? "bg-control-bg-selected" : "hover:bg-control-bg-hovered"
@@ -690,7 +713,7 @@ function WorkspaceRow({
 						</span>
 					</button>
 				)}
-				{activity && <ActivityGlyph status={activity.status} counts={activity.counts} />}
+				{needsAttention ? <AttentionDot /> : null}
 				<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
 					<DropdownMenuTrigger
 						data-testid="workspace-menu"

@@ -183,19 +183,16 @@ used when the variable is absent). A missing artifact, failed generation, or una
 before any provider turn; PI's ordinary first-available fallback is never accepted as test configuration.
 The same copy and hermetic environment seed the private restart host.
 
-**Workspace activity** (`workspace-activity.spec.ts`) covers the Projects rail's agent-state glyphs without
-an agent, and is the reason the host's `failed`/`waiting` derivations read the transcript: a seeded fixture
-transcript (an assistant with `stopReason: "error"`, or an `ask_user_question` call plus its `ack` tool
-result) becomes real activity, so the whole chain — host derivation, `session.activity` push, store fold,
-rollup, render — runs for real on the no-agent lane. It asserts the row's `data-activity` and the glyph's
-`aria-label` (never the tooltip, which needs hover), the rollup breakdown when one workspace holds both
-states, and the collapsed-project rollup.
-
-Two entry paths are covered on purpose. Opening the chat attaches the session and exercises the **live**
-path; a **reload after seeding** exercises the **disk** path — the snapshot union — by asserting the glyph
-appears while the workspace is never activated and no chat tab exists, which is the reviewer scenario a
-host restart produces. Note that **seeding must happen after `openFixtureProject`**: `openAppFresh` calls
-`resetState`, which deletes the isolated agent dir's `sessions` tree, so anything seeded earlier is wiped.
+**Session state** coverage seeds complete transcript states and drives normalized host blockers/runs to pin
+Projects rail presentation: both needs-input and owner-globally unread results render the same static green
+attention dot (“Needs attention”), while genuinely running sessions pulse the existing workspace/project
+identity icon without changing its colour. The rail must not substitute question/check/result glyphs or a
+spinner. Running alone has no attention dot; queued, hidden/background, and explicitly stopped sessions stay
+quiet; a live blocked question keeps its dot while its orthogonal running pulse may coexist. Reconnect/restart
+snapshots, direct-versus-passive activation, owner-global clearing, and snapshot
+retry are covered; live-agent coverage pins `data-running`/`running-icon` pulse behavior and coexistence with
+`data-attention`/`attention-dot`. These are stable visual hooks rather than alternate state models. The retired `session.activityList → []` compatibility method
+remains a focused handler test.
 
 **Topbar chrome** (`topbar-chrome.spec.ts`) proves the web side of the desktop title-bar contract without a
 desktop: it injects the three host-published CSS properties (`--window-chrome-inset-left|right`,

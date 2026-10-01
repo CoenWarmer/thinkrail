@@ -26,6 +26,7 @@ import { isControlMessage } from "@thinkrail/contracts";
 import { CodedError } from "@thinkrail/shared/codedError";
 import {
 	abortSession,
+	acknowledgeCompletion,
 	answerQuestion,
 	clampThinkingForModel,
 	clearQueueSession,
@@ -38,16 +39,18 @@ import {
 	getSessionMessages,
 	getSessionResources,
 	getSessionStats,
+	getSessionWorkspaceId,
 	hasSession,
 	isHostResourceId,
 	isPiSessionId,
 	listAvailableModels,
 	listProjectAliasSkillNames,
-	listSessionActivity,
+	listSessionStates,
 	listSessions,
 	listSkillCatalog,
 	listSkillCommands,
 	notifyExtUi,
+	nudgeSession,
 	promptSession,
 	readBackgroundCommandOutput,
 	readChildTranscript,
@@ -867,13 +870,42 @@ const handlers: Record<string, Handler> = {
 			}
 		});
 	},
-	"session.activityList": () =>
-		listSessionActivity(
+	"session.stateList": () =>
+		listSessionStates(
 			listAllWorkspaceRecords().map((workspace) => ({
 				id: workspace.id,
+				projectId: workspace.projectId,
 				cwd: workspace.worktreePath,
 			})),
 		),
+	"session.acknowledgeCompletion": (params) => {
+		const p = params as { sessionId: string; completionId: string };
+		return acknowledgeCompletion(p.sessionId, p.completionId);
+	},
+	"session.nudge": async (params) => {
+		const p = params as {
+			workspaceId: string;
+			sessionId: string;
+			text: string;
+			images?: ImageContent[];
+		};
+		const workspace = getWorkspace(p.workspaceId);
+		const attachedWorkspaceId = getSessionWorkspaceId(p.sessionId);
+		if (
+			(attachedWorkspaceId !== undefined && attachedWorkspaceId !== p.workspaceId) ||
+			(attachedWorkspaceId === undefined &&
+				!(await ensureSessionAttached(p.sessionId, p.workspaceId, workspace.worktreePath)))
+		) {
+			throw new Error(`Unknown session: ${p.sessionId}`);
+		}
+		if (!isControlMessage(p.text)) throw new Error("Session nudge must be a control message");
+		const nudge = nudgeSession(p.sessionId, p.text, p.images);
+		if (nudge.disposition !== "needs_input") {
+			await ackSend(runObservation.send(p.sessionId, "internal", nudge.send));
+		}
+		return { disposition: nudge.disposition };
+	},
+	"session.activityList": () => [],
 	"session.getMessages": (params) => {
 		const p = params as { sessionId: string; workspaceId: string };
 		return getSessionMessages(p.sessionId, p.workspaceId, getWorkspace(p.workspaceId).worktreePath);

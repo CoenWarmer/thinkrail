@@ -78,46 +78,28 @@ treatment.
   it differs from the name (so pristine/legacy `workspace-N` rows stay a single compact line) — the display
   name is decoupled from the git branch (see [[submodule-server-workspaces]]).
 
-  **One decoration class, and only one.** Workspace rows deliberately show **no `+N −M` change badge**:
-  the Projects view is for navigation and identity, and change detail stays in the dedicated Changes
-  views. The single admitted exception is the **activity glyph** — live agent state — because it is the
-  answer to a question the rail is the *only* place to ask: "what is happening in the workspaces I do not
-  have open?" Without it the user must open every workspace to find out, which is navigation, not detail.
-  A `+N −M` badge fails that test (the Changes view answers it better and the rail cannot show it
-  truthfully without watching every worktree), so the rule stands for everything else.
+  Workspace/project session presentation comes only from normalized host state. The rail has exactly two
+  visual treatments: a static green/accent **attention dot** for either a concrete needs-input blocker or an
+  owner-globally unread result, and a soft pulse on the existing workspace/project identity icon while a
+  top-level session is genuinely working. Attention is binary: needs-input and unread-result states use the
+  same dot, with the accessible label **“Needs attention”** and no question/check/result glyph, spinner,
+  count, or status-specific tooltip. Working keeps the icon's existing active/inactive colour and exposes
+  **“Agent working”** accessibly; it never adds a second marker. Queued, hidden/background, stopped, and quiet
+  sessions do not pulse; a needs-input session may still pulse when its orthogonal execution fact remains
+  running, so the attention dot and working treatment can coexist. Reduced motion removes the animation while
+  retaining the same-hue icon. Collapsed project rollup uses the same selectors as
+  workspace rows, while expanded projects show the detail on workspace rows. The components remain
+  props-driven over the normalized host-state selectors.
 
-  **`ActivityGlyph`** renders it: a `size-14` Remix line icon in a `size-20` box, keyed by
-  `ActivityStatus` — `RiRecordCircleLine`/`text-feedback-info` (running),
-  `RiQuestionnaireLine`/`text-feedback-warning` (waiting), `RiErrorWarningLine`/`text-feedback-error`
-  (failed), `RiTimeLine`/`text-text-subtle` (queued). Presentational and props-driven; the rollup arrives
-  as an `ActivityRollup` from the store's pure `workspaceActivityRollup`/`projectActivityRollup`, which
-  `ProjectTree` calls against its one stable `activityByWorkspace` subscription — a rollup returned *from*
-  a Zustand selector would be a fresh object every store change and re-render the whole rail.
-  - **Icons, not coloured dots** (`.review-thread-dot`'s 6px circle was the alternative): five states
-    encoded purely in hue fail colour-blind users and the shipped high-contrast themes. Shape carries the
-    meaning; colour reinforces it.
-  - **`running` is `feedback-info`, never the accent.** The active workspace's icon and name already
-    render `text-primary` on these very rows, so an accent-green glyph would read as selection.
-  - **No motion.** The rail is permanently in peripheral vision, and several concurrent runs pulsing out
-    of phase read as flicker. The chat plan pane keeps its pulse — that surface is actively read.
-  - **Idle draws nothing at all** (`ActivityRollup` is `null`), so a quiet rail is byte-identical to the
-    pre-feature one; twenty idle workspaces wearing twenty glyphs would destroy the signal.
-  - It sits in **its own flex column between the identity button and the kebab**, so the hover-revealed
-    kebab never covers it (a trailing overlay would).
-  - **Hover explains it**, via `IconTooltip` (`wrapTrigger` — a bare glyph is not focusable). One busy
-    chat shows the plain label; several show a per-state breakdown with counts in rollup order — the same
-    **`ACTIVITY_STATUS_ORDER`** the store's rollup uses (imported, not re-declared, so the two never drift) —
-    which is where the counts the row itself refuses to carry actually live. "Several" counts **chats**
-    (`activityChatCount`), not distinct statuses: two chats both working must read "2 chats working", so a
-    threshold on the number of breakdown *lines* would silently drop the count in exactly the
-    single-status case. The tooltip is an *enhancement*: the
-    same text is always the glyph's `aria-label`, because Radix tooltips are hover/focus-only and a phone
-    has neither.
-  - **Both** row kinds carry **`data-activity`** (absent when idle) as the e2e hook — workspace rows and
-    collapsed project rows alike, on the row rather than the glyph, so the status has one home in the DOM.
+  `ProjectTree` renders the shared dependency-light `AttentionDot` from normalized host-state selectors.
+  It is static accent colour, carries no count or state-specific glyph/tooltip, and occupies its own flex
+  column between the identity button and the hover-revealed kebab. Workspace and collapsed-project rows
+  expose `data-attention` only while positive. Separately, the shared `RunningIcon` wraps the existing
+  identity icon for normalized working state; workspace and collapsed-project rows expose `data-running` only
+  while positive. These attributes are test hooks, not a second state model.
 
-  **Project rows carry the rollup only while collapsed**, matching the collapsed-only workspace count;
-  expanded, their workspace rows already say it. The **Default workspace**
+  **Project rows carry the workspace count only while collapsed**; expanded, the workspace rows provide the
+  detail directly. The **Default workspace**
   (`kind === "default"` — the project folder itself) renders **pinned first** (the server pins it in
   `workspace.list`; `addWorkspace` appends created worktree rows after it), with a **`House` icon** in
   place of the `GitBranch` glyph and **no Rename or Remove item** (non-renamable/non-removable — the server

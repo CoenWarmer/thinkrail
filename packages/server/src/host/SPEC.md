@@ -401,18 +401,12 @@ channel fan-out, and the process-boot wrapper both launchers share.
   `available:false` only after validating its parent. No client path/PID field is accepted.
   The agent's resource publisher maps to `session.resourcesChanged`, subscribed in the WS open handler;
   this is a catalog invalidation, never an output broadcast. Resource ownership and teardown stay in agent.
-- **Activity fan-out:** `createServer` installs the agent module's activity publisher and broadcasts each
-  `SessionActivityPayload` on `session.activity`, which the WS `open` handler subscribes for every client
-  alongside the other session channels; `session.activityList` serves the cross-workspace snapshot, since
-  pushes are never replayed and a reconnecting client would otherwise show a stale rail. That handler is
-  where the workspace **registry** meets the agent: it passes every record's `{id, cwd}` (via
-  `listAllWorkspaceRecords`) so the agent can union on-disk sessions without ever performing a persistence
-  lookup of its own — the same shape as `session.list` receiving one workspace's `worktreePath`. This module also
-  satisfies the agent's **`setActivityProjectResolver`** seam by mapping a workspace id to its
-  `projectId` through the workspace registry (unresolvable → `null`, and the agent then publishes
-  nothing) — the registry lives here, so attribution is composed here rather than the agent learning what
-  a project is. Derivation, precedence, and lifetime belong to [[submodule-server-agent]]; the wire shape
-  and why `projectId` rides each row are in [[module-contracts]].
+- **Session-state composition:** before serving, the host supplies every workspace `{id,cwd}`, initializes
+  lifecycle/receipt metadata, and installs the workspace→project resolver. `session.stateList` returns the
+  complete all-workspace snapshot; `session.state` broadcasts full records; completion acknowledgement and
+  nudge handlers validate workspace/session identity through the same registry. The WS open handler
+  subscribes every client after welcome. `session.activityList` remains an inert `[]` compatibility method
+  for one window and has no push channel.
 - **CLI update lifecycle:** a launcher may supply one optional asynchronous notice producer, fixed interval,
   and parameterless update runner. `createServer` starts checks after listening without awaiting them and never
   overlaps checks. A newer release becomes the retained `available` snapshot in later welcomes. The v70

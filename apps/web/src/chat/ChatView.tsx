@@ -27,6 +27,7 @@ import {
 	selectCanRenameChat,
 	selectCatalogModel,
 	selectCompactionTurnIds,
+	selectReadyCompletionActivation,
 	selectSkillsStale,
 	selectWorkspaceById,
 	specPathMatcher,
@@ -57,7 +58,7 @@ import {
 	parseNativeChatCommand,
 	prepareNameChatCommand,
 } from "./nativeCommands";
-import { planGlance } from "./planView";
+import { hostSessionGlance, planGlance } from "./planView";
 import { QueueStrip } from "./QueueStrip";
 import { CommandLogView, ResourcesButton, ResourcesContent } from "./resources";
 import { estimateChatRowHeights, type RowHeightEstimateCache } from "./rowHeightEstimates";
@@ -248,6 +249,42 @@ export default function ChatView({
 		() => projectRows(chronologicalRows, chatMessageOrder),
 		[chronologicalRows, chatMessageOrder],
 	);
+	const completionId = runtime.hostState?.completion?.completionId ?? null;
+	const completionAnchorRowId = completionId ? (chronologicalRows.at(-1)?.id ?? null) : null;
+	const readyCompletionId = useAppStore((state) =>
+		selectReadyCompletionActivation(state, workspaceId, sessionId),
+	);
+	const directActivationTick = useAppStore(
+		(state) => state.directChatActivationTickBySession[sessionId] ?? 0,
+	);
+	useEffect(() => {
+		if (!readyCompletionId) return;
+		let cancelled = false;
+		let retry: ReturnType<typeof setTimeout> | undefined;
+		let delay = 250;
+		let attempts = 0;
+		const acknowledge = (): void => {
+			attempts++;
+			void getTransport()
+				.request("session.acknowledgeCompletion", {
+					sessionId,
+					completionId: readyCompletionId,
+				})
+				.then(({ record }) => {
+					if (!cancelled) useAppStore.getState().applySessionState(record);
+				})
+				.catch(() => {
+					if (cancelled || attempts >= 5) return;
+					retry = setTimeout(acknowledge, delay);
+					delay = Math.min(delay * 2, 4_000);
+				});
+		};
+		acknowledge();
+		return () => {
+			cancelled = true;
+			if (retry) clearTimeout(retry);
+		};
+	}, [directActivationTick, readyCompletionId, sessionId]);
 	const rowHeightEstimateCacheRef = useRef<{
 		messageOrder: ChatMessageOrder;
 		cache: RowHeightEstimateCache;
@@ -446,6 +483,10 @@ export default function ChatView({
 		moveSelection,
 		openMessage,
 	} = useHistorySearch(sessionId, workspaceId, projectId);
+	useEffect(() => {
+		useAppStore.getState().setChatObscured(sessionId, historyState.open);
+		return () => useAppStore.getState().setChatObscured(sessionId, false);
+	}, [historyState.open, sessionId]);
 
 	const chatLocationRequest = useAppStore((s) => s.chatLocationRequest);
 	const activeChatLocationReveal = useRef<typeof chatLocationRequest>(null);
@@ -841,8 +882,8 @@ export default function ChatView({
 	);
 
 	const planGlanceState = useMemo(
-		() => planGlance(isStreaming, askStates),
-		[isStreaming, askStates],
+		() => hostSessionGlance(runtime.hostState, planGlance(isStreaming, askStates)),
+		[askStates, isStreaming, runtime.hostState],
 	);
 
 	const chatActions = useMemo<ChatActions>(
@@ -875,6 +916,12 @@ export default function ChatView({
 			<AskStatesContext.Provider value={askContext}>
 				<div
 					ref={chatViewRef}
+					onPointerDownCapture={(event) => {
+						const target = event.target;
+						if (target instanceof Element && target.closest('[data-testid="history-overlay"]'))
+							return;
+						useAppStore.getState().noteDirectChatActivation(sessionId);
+					}}
 					data-testid="chat-view"
 					data-line-width-bounded={chatLineWidthBounded}
 					data-message-order={chatMessageOrder}
@@ -1019,6 +1066,17 @@ export default function ChatView({
 								computeItemKey={(_, row) => row.id}
 								itemContent={(index, row) => (
 									<div
+										ref={
+											row.id === completionAnchorRowId && completionId
+												? (element) => {
+														if (element && !historyState.open) {
+															useAppStore
+																.getState()
+																.noteRenderedCompletion(sessionId, completionId);
+														}
+													}
+												: undefined
+										}
 										data-testid="chat-row"
 										data-chat-row-id={row.id}
 										data-chat-row-index={index - firstItemIndex}

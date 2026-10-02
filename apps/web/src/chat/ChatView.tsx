@@ -124,9 +124,10 @@ function transcriptMeasureClassName(bounded: boolean): string {
 }
 
 function StreamHeader({ context }: { context: ChatListContext }) {
-	const inset = context.runwayActive ? (
-		<div className="h-[clamp(48px,10cqh,80px)]" aria-hidden />
-	) : null;
+	const inset =
+		context.messageOrder === "oldest-first" || context.runwayActive ? (
+			<div className="h-[clamp(48px,10cqh,80px)]" aria-hidden />
+		) : null;
 	return (
 		<div ref={context.headerRef}>
 			{inset}
@@ -139,24 +140,29 @@ function StreamHeader({ context }: { context: ChatListContext }) {
 
 function StreamFooter({ context }: { context: ChatListContext }) {
 	if (context.messageOrder === "newest-first") {
-		return context.runwayActive ? (
-			<div ref={context.runwayRef} data-testid="chat-stream-runway" className="h-0" aria-hidden />
-		) : null;
+		return (
+			<div
+				ref={context.runwayRef}
+				data-testid="chat-stream-runway"
+				data-active={context.runwayActive}
+				className="h-0"
+				aria-hidden
+			/>
+		);
 	}
 	return (
 		<>
 			<StreamStatusSlot status={context.status} measureClassName={context.measureClassName} />
 			{context.runwayActive ? (
-				<>
-					<div ref={context.streamEdgeRef} data-testid="chat-stream-edge" className="h-0" />
-					<div
-						ref={context.runwayRef}
-						data-testid="chat-stream-runway"
-						className="h-0"
-						aria-hidden
-					/>
-				</>
+				<div ref={context.streamEdgeRef} data-testid="chat-stream-edge" className="h-0" />
 			) : null}
+			<div
+				ref={context.runwayRef}
+				data-testid="chat-stream-runway"
+				data-active={context.runwayActive}
+				className="h-0"
+				aria-hidden
+			/>
 		</>
 	);
 }
@@ -401,17 +407,12 @@ export default function ChatView({
 		const row = rows[index];
 		return row ? { id: row.id, index } : null;
 	}, [chatMessageOrder, rows]);
-	const runwayMarkerRowId =
-		chatMessageOrder === "newest-first"
-			? (latestUserRow?.id ?? rows[rows.length - 1]?.id ?? null)
-			: null;
 	const {
 		followOutput,
 		handleContentHeight,
 		handleScrollerRef,
 		headerRef,
 		streamEdgeRef,
-		runwayEdgeRef,
 		runwayRef,
 		scrollerElement,
 		showScrollButton,
@@ -1039,11 +1040,12 @@ export default function ChatView({
 								firstItemIndex={firstItemIndex}
 								increaseViewportBy={CHAT_VIEWPORT_INCREASE}
 								minOverscanItemCount={CHAT_MIN_OVERSCAN_ITEMS}
+								skipAnimationFrameInResizeObserver
 								scrollerRef={handleScrollerRef}
 								context={listContext}
 								components={CHAT_LIST_COMPONENTS}
 								className={cn(
-									"h-full min-h-0 overflow-x-hidden",
+									"h-full min-h-0 overflow-x-hidden [overflow-anchor:none]",
 									chatLineWidthBounded
 										? "w-full"
 										: "w-[var(--chat-transcript-width)] min-w-full max-w-none",
@@ -1103,11 +1105,6 @@ export default function ChatView({
 										runwayActive &&
 										index === firstItemIndex ? (
 											<div ref={streamEdgeRef} data-testid="chat-stream-edge" className="h-0" />
-										) : null}
-										{chatMessageOrder === "newest-first" &&
-										runwayActive &&
-										row.id === runwayMarkerRowId ? (
-											<div ref={runwayEdgeRef} data-testid="chat-runway-edge" className="h-0" />
 										) : null}
 									</div>
 								)}

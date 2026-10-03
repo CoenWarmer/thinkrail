@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ReviewFixDetails } from "./domain";
+import { DEFAULT_CONFIG, RECENT_MODELS_LIMIT, type ReviewFixDetails } from "./domain";
 import {
 	AGENT_REVIEW_SETTING_PROTOCOL_VERSION,
 	ANALYTICS_CONSENT_PROTOCOL_VERSION,
@@ -11,6 +11,7 @@ import {
 	isBackgroundCommandCompletionMessage,
 	isTodoReviewFixMessage,
 	JBCENTRAL_QUOTA_PROTOCOL_VERSION,
+	MODEL_PICKER_PROTOCOL_VERSION,
 	normalizeSessionTitle,
 	PLAN_REVIEW_SUBAGENT_PROTOCOL_VERSION,
 	PLAN_SUMMARY_GENERATION_PROTOCOL_VERSION,
@@ -123,6 +124,15 @@ test("host-owned new-chat defaults are pinned to v72", () => {
 	expect(WS_METHODS).not.toHaveProperty("modelSetDefault");
 });
 
+test("picker metadata and host-kept favorites/recents are pinned to v76", () => {
+	expect(PROTOCOL_VERSION).toBe(76);
+	expect(MODEL_PICKER_PROTOCOL_VERSION).toBe(76);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(MODEL_PICKER_PROTOCOL_VERSION);
+	expect(DEFAULT_CONFIG.favoriteModels).toEqual([]);
+	expect(DEFAULT_CONFIG.recentModels).toEqual([]);
+	expect(RECENT_MODELS_LIMIT).toBe(5);
+});
+
 test("rich review anchors advance the additive selector union to v74", () => {
 	expect(REVIEW_RICH_ANCHORS_PROTOCOL_VERSION).toBe(74);
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(REVIEW_RICH_ANCHORS_PROTOCOL_VERSION);
@@ -130,7 +140,6 @@ test("rich review anchors advance the additive selector union to v74", () => {
 });
 
 test("change mutations name their two methods at v75", () => {
-	expect(PROTOCOL_VERSION).toBe(75);
 	expect(CHANGE_MUTATIONS_PROTOCOL_VERSION).toBe(75);
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(CHANGE_MUTATIONS_PROTOCOL_VERSION);
 	expect(WS_METHODS.changeRevert).toBe("change.revert");

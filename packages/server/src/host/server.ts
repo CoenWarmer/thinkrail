@@ -604,8 +604,8 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 		) {
 			startAttributionClaim();
 		}
-		refreshSubagentTools();
-		refreshAgentReviewTool();
+		if (appliedUpdate.subagentsEnabled !== undefined) refreshSubagentTools();
+		if (appliedUpdate.agentReviewEnabled !== undefined) refreshAgentReviewTool();
 	});
 
 	setSessionCreatedPublisher((payload: SessionCreatedPayload) => {

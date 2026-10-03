@@ -32,6 +32,7 @@ export {
 	preparePiRuntimeGeneration,
 	settledAvailableModels,
 } from "./piRuntime";
+export { describeProviderAuth, type ProviderAuthFacts } from "./providerAuth";
 export {
 	REQUEST_REVIEW_TOOL_NAME,
 	type RequestReviewHandler,

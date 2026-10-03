@@ -136,7 +136,7 @@ import {
 	sendableComments,
 	updateComment,
 } from "../reviews";
-import { getConfig, updateConfig } from "../settings";
+import { getConfig, noteRecentModel, updateConfig } from "../settings";
 import { evictSpecIndex, projectHasSpecs, specGraph } from "../spec";
 import {
 	deleteTemplate,
@@ -788,6 +788,7 @@ const handlers: Record<string, Handler> = {
 			...(defaults.model ? { model: defaults.model } : {}),
 			thinkingLevel: defaults.thinkingLevel,
 		});
+		if (p.model && created.model) noteRecentModel(created.model);
 		trackChatStarted(created);
 		return created;
 	},
@@ -858,7 +859,7 @@ const handlers: Record<string, Handler> = {
 	},
 	"session.setModel": async (params) => {
 		const p = params as { sessionId: string; model: WireModel };
-		await setSessionModel(p.sessionId, p.model);
+		noteRecentModel(await setSessionModel(p.sessionId, p.model));
 		return { ok: true } as const;
 	},
 	"session.setThinkingLevel": (params) => {

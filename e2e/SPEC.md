@@ -89,7 +89,10 @@ Historical fixtures are seeded before entering their workspace, so discovery doe
 placement's persistence during browser reload. It never seeds a running resource or turns transcript
 text into execution authority. The empty-catalog UI probes cover keyboard focus, narrow layouts,
 welcome/reconnect hydration and old-host capability hiding using real responses; the old-host probe
-changes only the advertised protocol version. Tagged provider-backed probes launch real commands and
+changes only the advertised protocol version. The transcript-retirement focus probe supplies a completed
+child and persisted-form transcript at the wire seam, then downgrades the next welcome; the UI, reconnect,
+capability retirement and Radix focus teardown remain real. This terminal-only fixture is not evidence of
+agent resource execution. Tagged provider-backed probes launch real commands and
 children through agent tools, inspect bounded plain-text logs/transcripts, verify chat isolation,
 reload and closed-popover completion, and exercise individual Stop and confirmed Stop all. They never
 select a model or seed a running-resource catalog. SDK faux-provider unit tests are not evidence of
@@ -126,9 +129,12 @@ absent/outdated/malformed probes plus an above-minimum version staying ready, up
 add/remove, synchronous-action
 serialization, watched external add/change/remove, successful current-generation cutover for new chats, old
 live-chat coexistence after Disconnect, and boot/runtime retention after a closed synthetic-extension load
-failure. Unit coverage owns action single-flight, watcher debounce/coalescing, stale-candidate rejection, boot
-with and without the opaque extension, and exact-model no-fallback for new or reattached chats after Central
-is removed. There is no legacy migration, busy-turn drain, reattachment of live chats, compensation,
+failure. External replacement waits for the settled configured verdict and verifies that the replacement
+model is visible while the old model is gone. A fast candidate may finish before a browser poll observes
+`configuring`; that pending-work state is checked with a held candidate in the server unit fixture, not a
+minimum-visible-duration assumption in the browser. Unit coverage owns action single-flight, watcher
+debounce/coalescing, stale-candidate rejection, boot with and without the opaque extension, and exact-model
+no-fallback for new or reattached chats after Central is removed. There is no legacy migration, busy-turn drain, reattachment of live chats, compensation,
 affected-chat blocking, or recovery seal to test. Sentinel values in synthetic child output, extension
 diagnostics, and provider routing fields
 are asserted absent from the closed results and rendered settings surface; structural DTO allowlists and

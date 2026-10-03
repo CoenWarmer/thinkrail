@@ -4,6 +4,7 @@ import {
 	type RefObject,
 	useCallback,
 	useEffect,
+	useInsertionEffect,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -194,6 +195,13 @@ function rowAlignmentTarget(
 	return scroller.scrollTop + (target.top + target.bottom - viewport.top - viewport.bottom) / 2;
 }
 
+function useReadingBandController(
+	...args: Parameters<typeof createReadingBandController>
+): ReadingBandController {
+	const [controller] = useState(() => createReadingBandController(...args));
+	return controller;
+}
+
 export function useChatScroll(
 	virtuosoRef: RefObject<VirtuosoHandle | null>,
 	isStreaming: boolean,
@@ -207,9 +215,7 @@ export function useChatScroll(
 ): ChatScroll {
 	const edge = latestEdge(messageOrder);
 	const firstItemIndexRef = useRef(firstItemIndex);
-	firstItemIndexRef.current = firstItemIndex;
 	const rowHeightEstimatesRef = useRef(rowHeightEstimates);
-	rowHeightEstimatesRef.current = rowHeightEstimates;
 	const scrollerRef = useRef<HTMLElement | null>(null);
 	const headerElementRef = useRef<HTMLDivElement | null>(null);
 	const edgeRef = useRef<HTMLDivElement | null>(null);
@@ -218,13 +224,11 @@ export function useChatScroll(
 	const guardAnchor = useRef<{ id: string; top: number } | null>(null);
 	const guardPausedUntil = useRef(0);
 	const isStreamingRef = useRef(isStreaming);
-	isStreamingRef.current = isStreaming;
 	const recordProgrammaticScrollPositionRef = useRef<() => void>(() => undefined);
 	const measuredHeaderHeight = useRef(0);
 	const headerAnchorScrollTop = useRef(0);
 	const lastScrollerClientWidth = useRef<number | null>(null);
 	const latestEdgeRef = useRef(edge);
-	latestEdgeRef.current = edge;
 	const interactionStartScrollTop = useRef(0);
 	const returnIntentUntil = useRef(0);
 	const pointerIntentUntil = useRef(0);
@@ -245,7 +249,6 @@ export function useChatScroll(
 	const previousUserRowId = useRef(latestUserRow?.id ?? null);
 	const previousLatestRowId = useRef(latestRow?.id ?? null);
 	const latestRowIdRef = useRef<string | null>(latestRow?.id ?? null);
-	latestRowIdRef.current = latestRow?.id ?? null;
 	const releaseRowIdRef = useRef<string | null>(null);
 	const latestRowFrame = useRef<number | null>(null);
 	const rowRevealFrame = useRef<number | null>(null);
@@ -259,84 +262,80 @@ export function useChatScroll(
 	const [snapshot, setSnapshot] = useState<ReadingBandSnapshot>(() =>
 		initialReadingBandSnapshot(isStreaming),
 	);
-	const [controller] = useState<ReadingBandController>(() =>
-		createReadingBandController(
-			{
-				readGeometry: () => {
-					const scroller = scrollerRef.current;
-					if (!scroller) return null;
-					const edgeElement = edgeRef.current;
-					const viewportTop = scroller.getBoundingClientRect().top;
-					return {
-						...scrollBounds(scroller),
-						viewportHeight: scroller.clientHeight,
-						edgeBottom: edgeElement
-							? edgeElement.getBoundingClientRect().bottom - viewportTop
-							: null,
-					};
-				},
-				readScrollBounds: () => {
-					const scroller = scrollerRef.current;
-					return scroller ? scrollBounds(scroller) : null;
-				},
-				readViewportHeight: () => scrollerRef.current?.clientHeight ?? 0,
-				readReferenceRow: () => {
-					const scroller = scrollerRef.current;
-					if (!scroller) return null;
-					const row = topVisibleRow(scroller);
-					return row ? { id: row.id, top: scroller.scrollTop + row.top } : null;
-				},
-				readRowTop: (id) => {
-					const scroller = scrollerRef.current;
-					if (!scroller) return null;
-					const row = mountedChatRow(scroller, id);
-					if (!row) return null;
-					return (
-						scroller.scrollTop +
-						row.getBoundingClientRect().top -
-						scroller.getBoundingClientRect().top
-					);
-				},
-				writeScrollTop: (top) => {
-					const scroller = scrollerRef.current;
-					if (!scroller) return;
-					scroller.scrollTop = top;
-					recordProgrammaticScrollPositionRef.current();
-					const headerHeight = headerElementRef.current?.getBoundingClientRect().height ?? 0;
-					if (Math.abs(headerHeight - measuredHeaderHeight.current) <= 0.5) {
-						headerAnchorScrollTop.current = boundedScrollTop(scroller);
-					}
-				},
-				writeRunwayHeight: (height) => {
-					runwayHeightRef.current = height;
-					const runway = runwayElementRef.current;
-					if (runway) {
-						const scroller = scrollerRef.current;
-						const before = scroller?.scrollTop ?? 0;
-						runway.style.height = `${height}px`;
-						if (scroller && Math.abs(scroller.scrollTop - before) > 0.5) {
-							recordProgrammaticScrollPositionRef.current();
-						}
-					}
-				},
-				anchorTurn: (index, inset) => {
-					guardPausedUntil.current = performance.now() + VIRTUOSO_PLACEMENT_WINDOW_MS;
-					guardAnchor.current = null;
-					virtuosoRef.current?.scrollToIndex({
-						index,
-						align: "start",
-						offset: -inset,
-						behavior: "auto",
-					});
-				},
-				prefersReducedMotion: () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-				now: () => performance.now(),
-				requestFrame: (callback) => requestAnimationFrame(callback),
-				cancelFrame: (id) => cancelAnimationFrame(id),
-				onStateChange: setSnapshot,
+	const controller = useReadingBandController(
+		{
+			readGeometry: () => {
+				const scroller = scrollerRef.current;
+				if (!scroller) return null;
+				const edgeElement = edgeRef.current;
+				const viewportTop = scroller.getBoundingClientRect().top;
+				return {
+					...scrollBounds(scroller),
+					viewportHeight: scroller.clientHeight,
+					edgeBottom: edgeElement ? edgeElement.getBoundingClientRect().bottom - viewportTop : null,
+				};
 			},
-			{ streaming: isStreaming, latestEdge: edge, movement },
-		),
+			readScrollBounds: () => {
+				const scroller = scrollerRef.current;
+				return scroller ? scrollBounds(scroller) : null;
+			},
+			readViewportHeight: () => scrollerRef.current?.clientHeight ?? 0,
+			readReferenceRow: () => {
+				const scroller = scrollerRef.current;
+				if (!scroller) return null;
+				const row = topVisibleRow(scroller);
+				return row ? { id: row.id, top: scroller.scrollTop + row.top } : null;
+			},
+			readRowTop: (id) => {
+				const scroller = scrollerRef.current;
+				if (!scroller) return null;
+				const row = mountedChatRow(scroller, id);
+				if (!row) return null;
+				return (
+					scroller.scrollTop +
+					row.getBoundingClientRect().top -
+					scroller.getBoundingClientRect().top
+				);
+			},
+			writeScrollTop: (top) => {
+				const scroller = scrollerRef.current;
+				if (!scroller) return;
+				scroller.scrollTop = top;
+				recordProgrammaticScrollPositionRef.current();
+				const headerHeight = headerElementRef.current?.getBoundingClientRect().height ?? 0;
+				if (Math.abs(headerHeight - measuredHeaderHeight.current) <= 0.5) {
+					headerAnchorScrollTop.current = boundedScrollTop(scroller);
+				}
+			},
+			writeRunwayHeight: (height) => {
+				runwayHeightRef.current = height;
+				const runway = runwayElementRef.current;
+				if (runway) {
+					const scroller = scrollerRef.current;
+					const before = scroller?.scrollTop ?? 0;
+					runway.style.height = `${height}px`;
+					if (scroller && Math.abs(scroller.scrollTop - before) > 0.5) {
+						recordProgrammaticScrollPositionRef.current();
+					}
+				}
+			},
+			anchorTurn: (index, inset) => {
+				guardPausedUntil.current = performance.now() + VIRTUOSO_PLACEMENT_WINDOW_MS;
+				guardAnchor.current = null;
+				virtuosoRef.current?.scrollToIndex({
+					index,
+					align: "start",
+					offset: -inset,
+					behavior: "auto",
+				});
+			},
+			prefersReducedMotion: () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+			now: () => performance.now(),
+			requestFrame: (callback) => requestAnimationFrame(callback),
+			cancelFrame: (id) => cancelAnimationFrame(id),
+			onStateChange: setSnapshot,
+		},
+		{ streaming: isStreaming, latestEdge: edge, movement },
 	);
 
 	const guardActive = useCallback(() => {
@@ -398,7 +397,14 @@ export function useChatScroll(
 		headerAnchorScrollTop.current = actual;
 		rebaseGuard();
 	}, [rebaseGuard]);
-	recordProgrammaticScrollPositionRef.current = recordProgrammaticScrollPosition;
+	useInsertionEffect(() => {
+		firstItemIndexRef.current = firstItemIndex;
+		rowHeightEstimatesRef.current = rowHeightEstimates;
+		latestEdgeRef.current = edge;
+		isStreamingRef.current = isStreaming;
+		latestRowIdRef.current = latestRow?.id ?? null;
+		recordProgrammaticScrollPositionRef.current = recordProgrammaticScrollPosition;
+	});
 
 	const resumeNativeMotion = useCallback(() => {
 		const resume = nativeResume.current;

@@ -74,6 +74,59 @@ reads `bun.lock` and rejects any second `react` or `react-dom` version. Every Re
 packages together and repeats the mounted-chat memory stress probe before this temporary canary pin can
 return to stable.
 
+**The React Compiler is on for every `apps/web` bundle** (`vite.config.ts`: `@rolldown/plugin-babel` running
+`@vitejs/plugin-react`'s `reactCompilerPreset()` over dev and build). Three devDependencies live in this
+manifest only, and the `@babel/core` 7.x pin is load-bearing: `babel-plugin-react-compiler` 1.0.0 mis-lowers
+destructuring defaults under Babel 8 and silently drops those functions from compilation. Bailouts never
+fail the build — a function the compiler cannot prove safe is skipped whole, not miscompiled — so check it
+ran: a production build's `dist/assets/*.js` carries `react.memo_cache_sentinel` in the hundreds (React's own
+runtime accounts for three). `bun test` transpiles without Vite, so only the browser E2E suite exercises
+compiled output.
+
+The shell, the workbench group views, `ChatView`, `Composer` and `useChatScroll` compile because they keep
+these conventions:
+
+- A latest-value ref (`xRef.current = value`) is written in a `useInsertionEffect`, never in render, and
+  render never reads `ref.current`. Insertion effects run for the whole tree before any layout effect, so a
+  child's layout effect that calls back into the parent (`react-resizable-panels`' `onLayout`, Virtuoso's
+  geometry reads in `useChatScroll`) sees the current value. The effect only assigns refs: no state, no DOM.
+- A hook hands refs back beside render values as a tuple (`useElementSize`), or the caller destructures them
+  (`useCollapsibleRegion`, dnd-kit results): reading a render value off an object that carries a ref counts
+  as a ref read.
+- A ref that travels as a prop is named `*Ref` (`selectionEpochRef`) so handlers may mutate it.
+- A closure that reads refs reaches a `useState` initialiser only through a hook
+  (`useReadingBandController`), and a ref is never handed to a plain helper; the helper becomes a hook that
+  owns it (`useSideResizeBinder`).
+- A default parameter never reads a member expression (`caret = text.length`); resolve it in the body.
+- A closure never applies `++`/`--` to a variable it captures; write `attempts += 1`.
+- A `useMemo`/`useCallback` lists every dependency it reads, or the compiler cannot preserve it.
+- A `useMemo` dependency the callback does not read is dropped, so a memo cannot reset on a key it ignores
+  (`useMemo(() => new Map(), [key])` builds one map per mount). Reset through state keyed on the value instead
+  (`ChatView`'s row-height estimate cache).
+- Render never reads a value the compiler cannot see change — `matchMedia`, storage, `Date.now`, a module
+  singleton. It arrives through `useSyncExternalStore` or state: `AppearanceSettings` subscribes with
+  `onSystemAppearanceChange`, and relative-time labels take `now` from `components/useNow`.
+
+Known bailouts include two hot paths: `useVirtualRows` runs on every `ChatView` render (each streamed delta)
+and `PlanComposer` on every plan-pane keystroke. Shared hooks and resource surfaces also have bailouts;
+compilation of the chat/shell hot paths does not imply coverage of every file/diff renderer.
+
+- Ref access in render: `useVirtualRows` (reads the visible-anchor ref while adjusting state during render;
+  state would cost a render per scroll), `useWorkspaceRead`, `useChatTodos`, `useOpenBranchReview`,
+  `useBranchList`, `useTemplateCommandPicker`, `usePendingSelection`, `MonacoEditor`, `AskUserQuestionCard`,
+  `useScrollViewState`, Pierre diff/file's `useThreadAnnotations`, `PierreDiffSurface`, `PierreFileSurface`,
+  image diff's `ImageContent`, `ImageView`, `PdfView`, `usePdfDocument`.
+- try/finally: `PlanPane` (also a throw inside try), `PlanComposer`, `ReviewPanel`, `SendButtonBase`,
+  `NewWorkspaceDialog`, `SkillsDialog`, `TemplateEditorDialog`, `JetBrainsAiCard`, `ProvidersSettings`,
+  `ModelsSettings`, `GithubSettings`, `LayoutSettings`, `ProjectSkillsNotice`, `StarterTemplatesOffer`.
+- try without catch: `usePromptImages`, `LineWidthControl`.
+- Throw inside try: `DiffPane`.
+- Manual memo dependencies cannot be preserved: `CsvDiff`, `JsonDiff`, `NotebookDiffSurface`, `PdfDiff`.
+- Other: `useLiveTabContent` (`??=`), `useAnalyticsConsent` (a callback that calls itself), `TemplateRow`
+  (a conditional inside try/catch), `HistoryOverlay`'s `Highlight` (mutates a closure counter).
+
+A new bailout is a regression unless it joins this list.
+
 ### Dependency graph
 
 - `navigation` → `store`, `transport`, `contracts` (type-only); neither dependency imports it, and `main.tsx` initializes the integration

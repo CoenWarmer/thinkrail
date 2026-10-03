@@ -8,7 +8,15 @@ import type {
 	ThinkingLevel,
 	WireModel,
 } from "@thinkrail/contracts";
-import { type RefCallback, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type RefCallback,
+	useCallback,
+	useEffect,
+	useInsertionEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,7 +69,7 @@ import {
 import { hostSessionGlance, planGlance } from "./planView";
 import { QueueStrip } from "./QueueStrip";
 import { CommandLogView, ResourcesButton, ResourcesContent } from "./resources";
-import { estimateChatRowHeights, type RowHeightEstimateCache } from "./rowHeightEstimates";
+import { estimateChatRowHeights } from "./rowHeightEstimates";
 import { type ChatRow, deriveRows, projectRows, rowIndexForTurn } from "./rows";
 import { SkillsDialog } from "./SkillsDialog";
 import { type StreamStatus, StreamStatusSlot, streamStatus } from "./StreamIndicator";
@@ -124,27 +132,30 @@ function transcriptMeasureClassName(bounded: boolean): string {
 }
 
 function StreamHeader({ context }: { context: ChatListContext }) {
+	const { headerRef, measureClassName, messageOrder, runwayActive, status } = context;
 	const inset =
-		context.messageOrder === "oldest-first" || context.runwayActive ? (
+		messageOrder === "oldest-first" || runwayActive ? (
 			<div className="h-[clamp(48px,10cqh,80px)]" aria-hidden />
 		) : null;
 	return (
-		<div ref={context.headerRef}>
+		<div ref={headerRef}>
 			{inset}
-			{context.messageOrder === "newest-first" ? (
-				<StreamStatusSlot status={context.status} measureClassName={context.measureClassName} />
+			{messageOrder === "newest-first" ? (
+				<StreamStatusSlot status={status} measureClassName={measureClassName} />
 			) : null}
 		</div>
 	);
 }
 
 function StreamFooter({ context }: { context: ChatListContext }) {
-	if (context.messageOrder === "newest-first") {
+	const { measureClassName, messageOrder, runwayActive, runwayRef, status, streamEdgeRef } =
+		context;
+	if (messageOrder === "newest-first") {
 		return (
 			<div
-				ref={context.runwayRef}
+				ref={runwayRef}
 				data-testid="chat-stream-runway"
-				data-active={context.runwayActive}
+				data-active={runwayActive}
 				className="h-0"
 				aria-hidden
 			/>
@@ -152,14 +163,14 @@ function StreamFooter({ context }: { context: ChatListContext }) {
 	}
 	return (
 		<>
-			<StreamStatusSlot status={context.status} measureClassName={context.measureClassName} />
-			{context.runwayActive ? (
-				<div ref={context.streamEdgeRef} data-testid="chat-stream-edge" className="h-0" />
+			<StreamStatusSlot status={status} measureClassName={measureClassName} />
+			{runwayActive ? (
+				<div ref={streamEdgeRef} data-testid="chat-stream-edge" className="h-0" />
 			) : null}
 			<div
-				ref={context.runwayRef}
+				ref={runwayRef}
 				data-testid="chat-stream-runway"
-				data-active={context.runwayActive}
+				data-active={runwayActive}
 				className="h-0"
 				aria-hidden
 			/>
@@ -168,6 +179,27 @@ function StreamFooter({ context }: { context: ChatListContext }) {
 }
 
 const CHAT_LIST_COMPONENTS = { Header: StreamHeader, Footer: StreamFooter };
+
+function useVirtualRows(
+	rows: ChatRow[],
+	messageOrder: ChatMessageOrder,
+	visibleAnchorRowIdRef: React.RefObject<string | null>,
+) {
+	const [storedVirtualRows, setStoredVirtualRows] = useState(() =>
+		initialVirtualRows(rows, messageOrder),
+	);
+	if (storedVirtualRows.rows === rows && storedVirtualRows.order === messageOrder) {
+		return storedVirtualRows;
+	}
+	const virtualRows = advanceVirtualRows(
+		storedVirtualRows,
+		rows,
+		messageOrder,
+		visibleAnchorRowIdRef.current,
+	);
+	setStoredVirtualRows(virtualRows);
+	return virtualRows;
+}
 
 export default function ChatView({
 	sessionId,
@@ -270,7 +302,7 @@ export default function ChatView({
 		let delay = 250;
 		let attempts = 0;
 		const acknowledge = (): void => {
-			attempts++;
+			attempts += 1;
 			void getTransport()
 				.request("session.acknowledgeCompletion", {
 					sessionId,
@@ -291,32 +323,19 @@ export default function ChatView({
 			if (retry) clearTimeout(retry);
 		};
 	}, [directActivationTick, readyCompletionId, sessionId]);
-	const rowHeightEstimateCacheRef = useRef<{
-		messageOrder: ChatMessageOrder;
-		cache: RowHeightEstimateCache;
-	}>({ messageOrder: chatMessageOrder, cache: new Map() });
-	if (rowHeightEstimateCacheRef.current.messageOrder !== chatMessageOrder) {
-		rowHeightEstimateCacheRef.current = { messageOrder: chatMessageOrder, cache: new Map() };
+	const [rowHeightEstimateCache, setRowHeightEstimateCache] = useState(() => ({
+		messageOrder: chatMessageOrder,
+		heights: new Map<string, number>(),
+	}));
+	if (rowHeightEstimateCache.messageOrder !== chatMessageOrder) {
+		setRowHeightEstimateCache({ messageOrder: chatMessageOrder, heights: new Map() });
 	}
-	const rowHeightEstimateCache = rowHeightEstimateCacheRef.current.cache;
 	const rowHeightEstimates = useMemo(
-		() => estimateChatRowHeights(rows, rowHeightEstimateCache),
+		() => estimateChatRowHeights(rows, rowHeightEstimateCache.heights),
 		[rows, rowHeightEstimateCache],
 	);
 	const visibleAnchorRowId = useRef<string | null>(null);
-	const [storedVirtualRows, setStoredVirtualRows] = useState(() =>
-		initialVirtualRows(rows, chatMessageOrder),
-	);
-	let virtualRows = storedVirtualRows;
-	if (storedVirtualRows.rows !== rows || storedVirtualRows.order !== chatMessageOrder) {
-		virtualRows = advanceVirtualRows(
-			storedVirtualRows,
-			rows,
-			chatMessageOrder,
-			visibleAnchorRowId.current,
-		);
-		setStoredVirtualRows(virtualRows);
-	}
+	const virtualRows = useVirtualRows(rows, chatMessageOrder, visibleAnchorRowId);
 	const firstItemIndex = virtualRows.firstItemIndex;
 
 	const messageActions = useMemo(
@@ -390,7 +409,6 @@ export default function ChatView({
 		setCommandDetail(null);
 		resourceDetailOpening.current = false;
 		if (resourceTranscript.current) {
-			resourceTranscript.current = false;
 			setTranscriptChildId(null);
 		}
 	}, [resources.knownUnsupported, setTranscriptChildId]);
@@ -471,7 +489,7 @@ export default function ChatView({
 			streamEdgeRef,
 		],
 	);
-	const askFocusScope = useRef<object>({}).current;
+	const [askFocusScope] = useState<object>(() => ({}));
 
 	const {
 		state: historyState,
@@ -492,11 +510,13 @@ export default function ChatView({
 	const chatLocationRequest = useAppStore((s) => s.chatLocationRequest);
 	const activeChatLocationReveal = useRef<typeof chatLocationRequest>(null);
 	const locationRowsRef = useRef(rows);
-	locationRowsRef.current = rows;
 	const locationTurnsRef = useRef(turns);
-	locationTurnsRef.current = turns;
 	const locationTurnMapRef = useRef(runtime.turnIdByMessageIndex);
-	locationTurnMapRef.current = runtime.turnIdByMessageIndex;
+	useInsertionEffect(() => {
+		locationRowsRef.current = rows;
+		locationTurnsRef.current = turns;
+		locationTurnMapRef.current = runtime.turnIdByMessageIndex;
+	});
 	const locationRowsReady = rows.length > 0;
 	const [flashRowId, setFlashRowId] = useState<string | null>(null);
 
@@ -898,7 +918,7 @@ export default function ChatView({
 			openSubagentTranscript: setTranscriptChildId,
 			revealChatElement: revealElement,
 		}),
-		[cancelAutomaticReveal, revealElement, sessionId],
+		[cancelAutomaticReveal, revealElement, sessionId, setTranscriptChildId],
 	);
 
 	const onExtUiReply = (value: string | boolean | null) => {
@@ -1262,14 +1282,11 @@ export default function ChatView({
 							workspaceId={workspaceId}
 							parentSessionId={sessionId}
 							childSessionId={transcriptChildId}
-							{...(resourceTranscript.current
-								? {
-										onCloseAutoFocus: (event: Event) => {
-											returnToResources(event);
-											resourceTranscript.current = false;
-										},
-									}
-								: {})}
+							onCloseAutoFocus={(event) => {
+								if (!resourceTranscript.current) return;
+								returnToResources(event);
+								resourceTranscript.current = false;
+							}}
 							onOpenChange={(open) => {
 								if (!open) setTranscriptChildId(null);
 							}}

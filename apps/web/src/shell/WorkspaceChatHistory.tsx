@@ -14,7 +14,7 @@ import { IconTooltip } from "../components/ui/tooltip";
 import { useNow } from "../components/useNow";
 import { cn, relativeTime } from "../lib";
 import { openChatInTab } from "../panels/openChat";
-import { type ClosedChat, toast, useAppStore } from "../store";
+import { type ClosedChat, selectWorkspaceById, toast, useAppStore } from "../store";
 import { errorText, getTransport } from "../transport";
 
 export function WorkspaceChatHistory({
@@ -240,6 +240,7 @@ function PromoteToFixtureButton({ workspaceId, chat }: { workspaceId: string; ch
 	const supported = useAppStore(
 		(s) => s.protocolVersion !== null && s.protocolVersion >= EVALS_PROTOCOL_VERSION,
 	);
+	const [pending, setPending] = useState(false);
 	if (!supported) return null;
 	return (
 		<IconTooltip label="Promote to eval fixture">
@@ -247,20 +248,46 @@ function PromoteToFixtureButton({ workspaceId, chat }: { workspaceId: string; ch
 				type="button"
 				data-testid="closed-chat-promote"
 				aria-label={`Promote ${chat.title} to an eval fixture`}
+				disabled={pending}
 				onClick={() => {
+					if (pending) return;
+					setPending(true);
 					void getTransport()
 						.request("eval.promote", { workspaceId, sessionId: chat.sessionId })
-						.then((result) =>
-							toast.success(`Fixture ${result.fixture.id} created — see the Evals panel.`),
-						)
-						.catch((error) => toast.error(errorText(error), "Couldn't promote the chat"));
+						.then((result) => {
+							toast.success(`Fixture ${result.fixture.id} created — see the Evals panel.`);
+							return refreshProjectEvals(workspaceId);
+						})
+						.catch((error) => toast.error(errorText(error), "Couldn't promote the chat"))
+						.finally(() => setPending(false));
 				}}
-				className={cn(menuItemClass, "shrink-0 px-4 text-text-muted")}
+				className={cn(menuItemClass, "shrink-0 px-4 text-text-muted disabled:opacity-50")}
 			>
 				<Flask className="size-14" />
 			</button>
 		</IconTooltip>
 	);
+}
+
+async function refreshProjectEvals(workspaceId: string): Promise<void> {
+	const workspace = selectWorkspaceById(useAppStore.getState(), workspaceId);
+	if (!workspace) return;
+	const transport = getTransport();
+	try {
+		const [fixtures, experiments] = await Promise.all([
+			transport.request("eval.fixtures", { workspaceId }),
+			transport.request("eval.experiments", { workspaceId }),
+		]);
+		useAppStore
+			.getState()
+			.setProjectEvals(
+				workspace.projectId,
+				{ fixtures: fixtures.fixtures, experiments: experiments.experiments },
+				experiments.run,
+			);
+	} catch {
+		// the panel's own hydration recovers on the next activation
+	}
 }
 
 const EMPTY_CHATS: ClosedChat[] = [];

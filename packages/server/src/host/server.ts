@@ -25,6 +25,7 @@ import {
 	refreshSubagentTools,
 	setAgentReviewEnabledResolver,
 	setExtUiPublisher,
+	setMetricsQueryHandler,
 	setReviewCommentHandler,
 	setSessionCreatedPublisher,
 	setSessionDeletedPublisher,
@@ -54,7 +55,14 @@ import {
 } from "../auth";
 import { redeliverInterview, releaseInterview, setFeedbackPublisher } from "../feedback";
 import { logger } from "../log";
-import { handleMetricsIngest, METRICS_INGEST_PREFIX, setMetricsPublisher } from "../metrics";
+import {
+	fileAnnotations,
+	handleMetricsIngest,
+	METRICS_INGEST_PREFIX,
+	metricsSummary,
+	setMetricsPublisher,
+	topLocations,
+} from "../metrics";
 import { loadWorkspaces } from "../persistence";
 import {
 	getProjects,
@@ -593,6 +601,19 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 	setReviewCommentHandler((sessionId, commentId, note) => ({
 		resolvedBody: resolveCommentFromAgent(sessionId, commentId, note).body,
 	}));
+	setMetricsQueryHandler((sessionId, params) => {
+		const workspaceId = getSessionWorkspaceId(sessionId);
+		if (!workspaceId) throw new Error("This session is not attached to a workspace.");
+		const summary = metricsSummary(workspaceId);
+		const limit = params.limit ?? 10;
+		return {
+			summary,
+			topLocations: topLocations(workspaceId, limit),
+			...(params.path !== undefined
+				? { file: { path: params.path, annotations: fileAnnotations(workspaceId, params.path) } }
+				: {}),
+		};
+	});
 	installRequestReviewSeam();
 	setTitleToolHost(titleToolHost);
 	reconcilePendingReviewsOnBoot();

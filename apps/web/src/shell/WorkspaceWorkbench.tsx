@@ -28,10 +28,12 @@ import { FileTree } from "../panels/FileTree";
 import { openFileInTab } from "../panels/openTabs";
 import { ProjectTree } from "../panels/ProjectTree";
 import "../panels/resources/register";
+import { EvalsPanel } from "../panels/EvalsPanel";
 import { ReviewPanel, selectActiveReviewedPath } from "../panels/ReviewPanel";
 import { reviewFlags } from "../panels/reviewModel";
 import { SpecsPanel } from "../panels/SpecsPanel";
 import { TerminalWorkbenchBody, useTerminalClose } from "../panels/TerminalWorkbench";
+import { useProjectEvals } from "../panels/useProjectEvals";
 import { useWorkspaceReview } from "../panels/useWorkspaceReview";
 import { useWorkspaceSpecs } from "../panels/useWorkspaceSpecs";
 import {
@@ -232,6 +234,7 @@ export function WorkspaceWorkbench({ workspaceId }: { workspaceId: string }) {
 	const deletedSessions = useAppStore((state) => state.deletedSessionsByWorkspace[workspaceId]);
 	const terminalClose = useTerminalClose();
 	const specs = useWorkspaceSpecs(workspaceId);
+	const evals = useProjectEvals(workspaceId);
 	const review = useWorkspaceReview(workspaceId);
 	const reviewComments = useAppStore((state) => state.reviewsByWorkspace[workspaceId]?.comments);
 	const reviewDraftCount = useAppStore((state) => selectReviewDraftCount(state, workspaceId));
@@ -534,6 +537,13 @@ export function WorkspaceWorkbench({ workspaceId }: { workspaceId: string }) {
 					body = (
 						<QuietScrollArea className="h-full" viewportClassName="p-12">
 							<SpecsPanel workspaceId={workspaceId} failed={specs.failed} onRetry={specs.reload} />
+						</QuietScrollArea>
+					);
+					break;
+				case "evals":
+					body = (
+						<QuietScrollArea className="h-full" viewportClassName="p-12">
+							<EvalsPanel workspaceId={workspaceId} failed={evals.failed} onRetry={evals.reload} />
 						</QuietScrollArea>
 					);
 					break;

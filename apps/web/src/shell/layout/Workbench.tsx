@@ -33,6 +33,8 @@ import {
 	RiDiscussLine,
 	RiExpandVerticalLine,
 	RiFileFill,
+	RiFlaskFill,
+	RiFlaskLine,
 	RiFolder2Fill,
 	RiFolder2Line,
 	RiGitPullRequestFill,
@@ -437,6 +439,8 @@ function tabIcon(tab: LayoutTab, active = false): ReactNode {
 					return <CustomIcon name={active ? "file-diff-fill" : "file-diff-line"} className={cls} />;
 				case "review":
 					return active ? <RiDiscussFill className={cls} /> : <RiDiscussLine className={cls} />;
+				case "evals":
+					return active ? <RiFlaskFill className={cls} /> : <RiFlaskLine className={cls} />;
 				default:
 					return active ? <RiLayout2Fill className={cls} /> : <PanelsTopLeft className={cls} />;
 			}

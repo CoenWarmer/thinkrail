@@ -1206,6 +1206,17 @@ own section. The kebab menu (`plan-menu`, a
   workspace's last known tree while the re-read is in flight (there is nothing to reset), and the failed-read
   flag is workspace-scoped so it can't leak a hint over a sibling's good tree. It returns `{ failed, reload }`
   — `SpecsPanel`'s error-only Retry calls `reload` directly, so no retry counter has to be held in panel state.
+- **`EvalsPanel`** is the experiment-lifecycle surface (architecture Decision #20 phase 2): fixtures
+  (+ a promote-session picker over an on-demand `session.list` read), experiments with a
+  baseline-anchored composer (**only wire-representable treatments** — model, thinking level — the
+  `EvalCondition` type makes others unrepresentable), per-condition aggregates from
+  `selectEvalConditionAggregates` on row expand (`eval.trials` read), the single run banner with
+  live cost + Stop, and the **budget-confirmation `ConfirmDialog` before every run** (restating
+  trials × budget; the host independently verifies the restated budget). Data arrives via
+  `useProjectEvals` — same `useWorkspaceRead` discipline as specs but the snapshot lands
+  project-keyed (`evalsByProject`). A pre-v77 host renders a plain "not supported" body (layout
+  tools are static, so gating is the panel body's job). Errors surface as toasts; the panel holds
+  no transient run state of its own (the `eval.update` fold owns it).
 - `SpecsPanel` is the read-only spec-graph viewer — a pure reader of that snapshot. One fetch per
   workspace activation, refetched automatically on the fs tick, rendered as the **`parent` tree** (roots =
   no/dangling parent; default-expanded). There is **no persistent Refresh control or panel toolbar row**:

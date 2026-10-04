@@ -515,7 +515,7 @@ export function isSystemThemePair(value: unknown): value is SystemThemePair {
 	);
 }
 
-export type LayoutToolId = "projects" | "specs" | "files" | "changes" | "review";
+export type LayoutToolId = "projects" | "specs" | "files" | "changes" | "review" | "evals";
 
 export type LayoutBottomAlignment = "center" | "center-left" | "center-right" | "full";
 

@@ -213,10 +213,18 @@ export function ChangesPanel({ workspaceId }: { workspaceId: string }) {
 		if (activeDiffTab) setHighlighted(null);
 	}, [activeDiffTab]);
 
+	const walkthrough = useAppStore((s) => s.walkthroughByWorkspace[workspaceId]);
+	const walkthroughStepPath =
+		walkthrough && walkthrough.scopeKey === scopeKey(scope)
+			? (walkthrough.steps[walkthrough.activeIndex]?.path ?? null)
+			: null;
+
 	const isActive = (path: string) =>
-		activeDiffTab
-			? activeDiffTab.path === path && scopeKey(activeDiffTab.scope) === scopeKey(scope)
-			: highlighted === path;
+		walkthroughStepPath !== null
+			? walkthroughStepPath === path
+			: activeDiffTab
+				? activeDiffTab.path === path && scopeKey(activeDiffTab.scope) === scopeKey(scope)
+				: highlighted === path;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">

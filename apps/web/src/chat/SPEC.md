@@ -1241,7 +1241,10 @@ Unknown custom messages retain their existing behavior.
   per-turn walkthrough trigger (`onWalkthrough` → `requestWalkthrough(workspaceId, sessionId,
   changedFiles)`, passed only when the welcome's protocol supports it — `selectWalkthroughAvailable`; the
   divider renders its "Walk me through it" chip only when the turn changed files and the callback exists,
-  and the request is consumed panels-side by `ChangesPanel`, keeping chat→panels one-way), and the
+  shows it disabled with a spinner while generation is busy (`walkthroughBusy` — ChatView derives it from
+  `walkthroughGenerating` plus a still-pending `walkthroughRequest`, covering the hand-off gap before the
+  panel consumes the request), and the request is consumed panels-side by `ChangesPanel`, keeping
+  chat→panels one-way), and the
   `isSpec` classifier it builds from the store's `specsByWorkspace` snapshot (subscribed as the stored array
   — a stable ref — and memoized into a matcher here, never a fresh Set inside the selector) — together with
   **`useHistorySearch.ts`** (the Ctrl+R history-recall overlay's store/transport edge),

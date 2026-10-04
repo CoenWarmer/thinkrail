@@ -187,14 +187,18 @@ treatment.
   that works even when the active card itself cannot render (a whitespace-only hunk under
   ignore-whitespace, collapsed context), the accepted recovery for server-anchored steps the current
   render hides. The flow lives in **`walkthrough.ts`**: `startWalkthrough`
-  fingerprints the scope's `git.status` **before** calling `walkthrough.generate` (diff movement during
+  fingerprints the scope's `git.status` **before** calling `walkthrough.generate` — with a raised
+  **120s request timeout**, fitting the host's 90s model budget the 60s transport default does not — (diff movement during
   generation then invalidates rather than certifies the tour), installs through the store's generation
   fence, then — because a mid-generation move fires its status reload before anything is installed —
   re-reads the status once post-install and replays `reconcileWalkthrough`, jumping to step 1 only when its
   own generation is still current and the tour survived that verification (a cleared tour raises an
   informational toast instead); `goToWalkthroughStep` clamps the
   index and opens that step's diff tab in preview. `ChangesPanel`'s status loads feed
-  `reconcileWalkthrough`, the invalidate-everything staleness hook. `DiffPane` projects the store
+  `reconcileWalkthrough`, the invalidate-everything staleness hook. While a walkthrough is installed and
+  its `scopeKey` matches the panel's scope, the file list's active-row highlight follows the active step's
+  file (tour position beats the active-tab/`highlighted` fallbacks — tab activation can legitimately lag or
+  skip during preview navigation). `DiffPane` projects the store
   walkthrough into the renderer prop: only when the walkthrough's `scopeKey` matches the tab's scope, it
   maps this file's steps to `WalkthroughCardStep`s (global indices, 0-based above-the-hunk anchor line,
   additions side unless the hunk is a pure deletion) and wires `onStep` → `goToWalkthroughStep`.

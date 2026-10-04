@@ -35,8 +35,8 @@ surface** — no wire method; consumers are host-side flows.
     referencing the caller's hunk inventory by index, each hunk at most once) for the "Walk me through
     it" feature, or `null` (best-effort, same degrade rules). Runs on the **default** tier — ordering
     and explaining a whole change set is the one assist task where cheap-model quality visibly fails.
-    `toWalkthroughDrafts(raw, hunkCount)` is the pure output guard (fence-tolerant JSON parse, index
-    bounds + dedupe, title/body clamp); `buildWalkthroughPrompt` is exported for tests. The **host**
+    `toWalkthroughDrafts(raw, hunkCount)` is the pure output guard (fence- and truncation-tolerant JSON parse —
+    a length-capped response salvages every complete entry — index bounds + dedupe, title/body clamp); `buildWalkthroughPrompt` is exported for tests. The **host**
     owns hunk inventory construction, session-context assembly, anchor mapping, and appending hunks
     the model skipped; `setWalkthroughRunner(fn)` is this task's runner seam.
 - **Public surface (barrel):** `setOneShotRunner`, `suggestPlanSummary`, `toPlanSummary`, `OneShotRunner`,

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { assembleSteps, type InventoryHunk } from "./walkthrough";
+import { assembleSteps, type InventoryHunk, isInsignificantHunk } from "./walkthrough";
 
 function hunk(path: string, start: number): InventoryHunk {
 	return {
@@ -33,6 +33,28 @@ test("assembleSteps appends skipped hunks in file order with a fallback title", 
 		"Changes in a.ts (L1)",
 		"Changes in b.ts (L40)",
 	]);
+});
+
+test("isInsignificantHunk skips pure import/re-export churn", () => {
+	expect(isInsignificantHunk(['+import { a } from "./a";', '-import { b } from "./b";'])).toBe(
+		true,
+	);
+	expect(isInsignificantHunk(['+import type { T } from "./t";'])).toBe(true);
+	expect(isInsignificantHunk(['+import "./side-effect";'])).toBe(true);
+	expect(isInsignificantHunk(['+export { a } from "./a";', "+export * from './b';"])).toBe(true);
+	expect(isInsignificantHunk(['+export type { T } from "./t";'])).toBe(true);
+	expect(isInsignificantHunk(['+} from "./multi-line";'])).toBe(true);
+	expect(isInsignificantHunk(["+", "-", '+import "./x";'])).toBe(true);
+});
+
+test("isInsignificantHunk keeps hunks with any substantive line", () => {
+	expect(isInsignificantHunk(['+import { a } from "./a";', "+const x = a();"])).toBe(false);
+	expect(isInsignificantHunk(["+export const x = 1;"])).toBe(false);
+	expect(isInsignificantHunk(["+export default foo;"])).toBe(false);
+	expect(isInsignificantHunk(["+export function go() {}"])).toBe(false);
+	expect(isInsignificantHunk(["-\tFoo,"])).toBe(false);
+	expect(isInsignificantHunk(["+", "-"])).toBe(false);
+	expect(isInsignificantHunk([])).toBe(false);
 });
 
 test("assembleSteps ignores duplicate and unknown draft indices", () => {

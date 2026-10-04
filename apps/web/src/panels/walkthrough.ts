@@ -35,12 +35,17 @@ export async function startWalkthrough(
 			toast.info("That turn's files have no changes left in this scope.");
 			return;
 		}
-		const { steps } = await transport.request("walkthrough.generate", {
-			workspaceId,
-			scope,
-			...(options?.sessionId ? { sessionId: options.sessionId } : {}),
-			...(paths ? { paths } : {}),
-		});
+		// Above the host's 90s model budget plus inventory build; the transport default (60s) is not.
+		const { steps } = await transport.request(
+			"walkthrough.generate",
+			{
+				workspaceId,
+				scope,
+				...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+				...(paths ? { paths } : {}),
+			},
+			{ timeoutMs: 120_000 },
+		);
 		useAppStore.getState().installWalkthrough(workspaceId, generation, {
 			scopeKey: scopeKey(scope),
 			fingerprint: walkthroughFingerprint(status.changes, paths),

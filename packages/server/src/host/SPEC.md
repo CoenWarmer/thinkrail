@@ -410,7 +410,9 @@ channel fan-out, and the process-boot wrapper both launchers share.
 - **Guided walkthrough composition** (`host/walkthrough.ts`, the `walkthrough.generate` handler, v76): the
   host builds the scope's hunk inventory itself — `git.status` for the file list (optionally filtered to the
   caller's `paths`), per-file `gitDiffFile` text sides only, zero-context `structuredPatch` hunks, capped at
-  80 hunks / 1600 chars each — assembles best-effort session context from the named chat's recent
+  80 hunks / 1600 chars each, dropping insignificant hunks (pure import/re-export churn plus blank lines,
+  `isInsignificantHunk`) unless the whole inventory would be empty, in which case the churn-only inventory
+  stands — assembles best-effort session context from the named chat's recent
   non-control user messages (`getSessionMessages`; absent or failing context never blocks), and delegates
   ordering/explanation to `assist.suggestWalkthrough` (see [[submodule-server-assist]]). Pure
   `assembleSteps` maps drafts to anchored `WalkthroughStep`s — model order first, every skipped hunk

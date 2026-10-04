@@ -65,6 +65,7 @@ async function buildHunkInventory(params: WalkthroughParams): Promise<InventoryH
 	const wanted = params.paths ? new Set(params.paths) : null;
 	const files = status.changes.filter((change) => !wanted || wanted.has(change.path));
 	const hunks: InventoryHunk[] = [];
+	const skipped: InventoryHunk[] = [];
 	for (const file of files) {
 		if (hunks.length >= MAX_HUNKS) break;
 		const diff = await gitDiffFile(params.workspaceId, file.path, params.scope);
@@ -82,7 +83,7 @@ async function buildHunkInventory(params: WalkthroughParams): Promise<InventoryH
 		);
 		for (const hunk of patch.hunks) {
 			if (hunks.length >= MAX_HUNKS) break;
-			hunks.push({
+			const inventoryHunk: InventoryHunk = {
 				path: file.path,
 				text: clip(hunk.lines.join("\n"), HUNK_TEXT_MAX),
 				anchor: {
@@ -90,10 +91,31 @@ async function buildHunkInventory(params: WalkthroughParams): Promise<InventoryH
 					original: { start: Math.max(1, hunk.oldStart), count: hunk.oldLines },
 					modified: { start: Math.max(1, hunk.newStart), count: hunk.newLines },
 				},
-			});
+			};
+			if (isInsignificantHunk(hunk.lines)) {
+				if (skipped.length < MAX_HUNKS) skipped.push(inventoryHunk);
+				continue;
+			}
+			hunks.push(inventoryHunk);
 		}
 	}
-	return hunks;
+	return hunks.length > 0 ? hunks : skipped;
+}
+
+const INSIGNIFICANT_LINE = /^(?:import\b|\}?\s*from\s+["']|export\s+(?:type\s+)?[{*]|export\s+\{)/;
+
+/** Import/re-export-only churn (plus blank lines) carries no reviewable idea — it is mechanical
+ * fallout of the hunks that do. Walkthroughs skip such hunks entirely. */
+export function isInsignificantHunk(lines: string[]): boolean {
+	let changed = 0;
+	for (const line of lines) {
+		if (line.length === 0 || (line[0] !== "+" && line[0] !== "-")) continue;
+		const content = line.slice(1).trim();
+		if (content.length === 0) continue;
+		changed += 1;
+		if (!INSIGNIFICANT_LINE.test(content)) return false;
+	}
+	return changed > 0;
 }
 
 async function sessionContext(sessionId: string, workspaceId: string): Promise<string | undefined> {

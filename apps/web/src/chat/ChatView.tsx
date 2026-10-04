@@ -895,6 +895,11 @@ export default function ChatView({
 	);
 
 	const walkthroughSupported = useAppStore(selectWalkthroughAvailable);
+	const walkthroughBusy = useAppStore(
+		(s) =>
+			Boolean(s.walkthroughGenerating[workspaceId]) ||
+			s.walkthroughRequest?.workspaceId === workspaceId,
+	);
 	const onWalkthrough = useCallback(
 		(paths: string[]) => {
 			useAppStore.getState().requestWalkthrough(workspaceId, sessionId, paths);
@@ -1128,6 +1133,7 @@ export default function ChatView({
 												onOpenChange={onOpenChange}
 												onReveal={onReveal}
 												onWalkthrough={walkthroughSupported ? onWalkthrough : undefined}
+												walkthroughBusy={walkthroughBusy}
 												onTryAgain={() => performSend(TRY_AGAIN_PROMPT, [], "send")}
 											/>
 										</FoldGeometryProvider>

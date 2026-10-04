@@ -327,10 +327,11 @@ dependency. This keeps test process drivers outside both launchers and the serve
     are replayed; the agent's recorded side is reference-only (replaying it would make conditions
     indistinguishable). **Rejected: live shadow sessions** — variants running beside a real user
     session diverge after one turn, carry unsandboxed bash side effects, and multiply token spend
-    silently. The package receives its session factory **by injection**, so the planned phase-2 host
-    integration (typed `experiment.*` contracts + web panels for fixture promotion, a
-    baseline-anchored experiment composer, trial inspection, and side-by-side condition compare)
-    adds no package cycle. Experiments spend real provider tokens: on demand only, never a
+    silently. The package receives its session factory **by injection**, so the host integration
+    (the typed `eval.*` wire surface at v77 + the Evals web panel: fixture promotion from history
+    and panel, a baseline-anchored experiment composer, budget-confirmed runs, live trial watching,
+    and side-by-side condition compare) adds no package cycle — `host` composes the factory over
+    `agent` and trial transcripts are disk reads of pi's live session files. Experiments spend real provider tokens: on demand only, never a
     commit/CI gate; fixtures and records stay local under `~/.thinkrail`. Detail: [[module-evals]].
 
 ## Invariants

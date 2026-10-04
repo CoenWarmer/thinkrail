@@ -1213,8 +1213,11 @@ own section. The kebab menu (`plan-menu`, a
   `selectEvalConditionAggregates` on row expand (`eval.trials` read), the single run banner with
   live cost + Stop, and the **budget-confirmation `ConfirmDialog` before every run** (restating
   trials × budget; the host independently verifies the restated budget). Data arrives via
-  `useProjectEvals` — same `useWorkspaceRead` discipline as specs but the snapshot lands
-  project-keyed (`evalsByProject`). A pre-v77 host renders a plain "not supported" body (layout
+  `useProjectEvals` — generation-guarded like `useWorkspaceRead`, but hydrating on workspace
+  activation and reconnect only, **never on worktree fs ticks**: eval state lives under the host
+  data dir, so a worktree change can't alter it and per-tick refetches would be pure churn. The
+  snapshot lands project-keyed (`evalsByProject`); post-mutation freshness comes from explicit
+  re-reads (panel reload, promote refresh) and the `eval.update` push. A pre-v77 host renders a plain "not supported" body (layout
   tools are static, so gating is the panel body's job). Errors surface as toasts; the panel holds
   no transient run state of its own (the `eval.update` fold owns it). **Trial inspection** opens a
   trial as a props-driven transcript dialog over `eval.trialMessages` (user/assistant markdown via

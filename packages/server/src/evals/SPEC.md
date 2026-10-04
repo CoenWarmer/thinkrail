@@ -1,7 +1,7 @@
 ---
 id: submodule-server-evals
 type: submodule-design
-status: draft
+status: active
 title: server/evals — experiment lifecycle host module
 parent: module-server
 references: [module-evals, submodule-server-session-baseline]

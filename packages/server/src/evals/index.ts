@@ -6,5 +6,4 @@ export {
 	promoteSession,
 	readTrialTranscript,
 	saveExperiment,
-	trialWorkspacePath,
 } from "./evalsStore";

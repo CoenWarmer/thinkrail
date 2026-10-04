@@ -70,17 +70,13 @@ export function buildWalkthroughPrompt(hunks: WalkthroughHunkInput[], context?: 
 	return parts.join("\n\n");
 }
 
-/** Pure output guard: parse the model's JSON (tolerating a code fence), keep entries whose `hunk`
- * is a valid unused inventory index and whose strings are non-empty after clamping. `null` when
- * nothing usable remains. */
+/** Pure output guard: parse the model's JSON (tolerating a code fence and a truncated tail — a
+ * length-capped response salvages every complete entry), keep entries whose `hunk` is a valid
+ * unused inventory index and whose strings are non-empty after clamping. `null` when nothing
+ * usable remains. */
 export function toWalkthroughDrafts(raw: string, hunkCount: number): WalkthroughStepDraft[] | null {
 	const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(raw);
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse((fenced?.[1] ?? raw).trim());
-	} catch {
-		return null;
-	}
+	const parsed = parseArrayLenient((fenced?.[1] ?? raw).trim());
 	if (!Array.isArray(parsed)) return null;
 	const seen = new Set<number>();
 	const drafts: WalkthroughStepDraft[] = [];
@@ -100,6 +96,24 @@ export function toWalkthroughDrafts(raw: string, hunkCount: number): Walkthrough
 		});
 	}
 	return drafts.length > 0 ? drafts : null;
+}
+
+function parseArrayLenient(text: string): unknown {
+	try {
+		return JSON.parse(text);
+	} catch {
+		// Truncated output: retry from the tail, closing the array after each complete-looking entry.
+		const start = text.indexOf("[");
+		if (start === -1) return null;
+		for (let end = text.lastIndexOf("}"); end > start; end = text.lastIndexOf("}", end - 1)) {
+			try {
+				return JSON.parse(`${text.slice(start, end + 1)}]`);
+			} catch {
+				// keep walking back
+			}
+		}
+		return null;
+	}
 }
 
 function clip(value: string, max: number): string {

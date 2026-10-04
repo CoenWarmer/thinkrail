@@ -54,6 +54,20 @@ test("toWalkthroughDrafts clamps long strings and collapses whitespace", () => {
 	expect(drafts?.[0]?.body.length).toBe(700);
 });
 
+test("toWalkthroughDrafts salvages complete entries from a truncated array", () => {
+	const truncated =
+		'[{"hunk":0,"title":"First","body":"a"},{"hunk":1,"title":"Second","body":"b"},{"hunk":2,"title":"Third","body":"cut off mid sent';
+	expect(toWalkthroughDrafts(truncated, 3)).toEqual([
+		{ hunk: 0, title: "First", body: "a" },
+		{ hunk: 1, title: "Second", body: "b" },
+	]);
+});
+
+test("toWalkthroughDrafts salvages a truncated array inside a code fence tail", () => {
+	const truncated = '```json\n[{"hunk":0,"title":"Only","body":"x"},{"hunk":1,"ti';
+	expect(toWalkthroughDrafts(truncated, 2)).toEqual([{ hunk: 0, title: "Only", body: "x" }]);
+});
+
 test("toWalkthroughDrafts returns null for garbage and empty arrays", () => {
 	expect(toWalkthroughDrafts("not json", 1)).toBeNull();
 	expect(toWalkthroughDrafts("[]", 1)).toBeNull();

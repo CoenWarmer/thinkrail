@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -137,6 +137,22 @@ test("startRun verifies the confirmed budget and publishes a terminal update", a
 	expect(trials[0]?.event?.costUsd).toBeCloseTo(0.01);
 	const withRecord = pushes.find((p) => p.trialAppended);
 	expect(withRecord?.trialAppended?.conditionId).toBe("baseline");
+});
+
+test("a failed synchronous setup never wedges the one-active-run latch", async () => {
+	await promoted("fx-1");
+	saveExperiment("p1", experiment());
+	mkdirSync(join(dataDir, "evals"), { recursive: true });
+	writeFileSync(join(dataDir, "evals", "work"), "a file where the work dir must be");
+	const confirmedBudget = { trialBudget: { maxTurns: 5 }, totalTrials: 1 };
+	expect(() => startRun({ experimentId: "exp-1", confirmedBudget, factory: okFactory })).toThrow();
+	expect(currentRunState()).toBeNull();
+	rmSync(join(dataDir, "evals", "work"));
+	const pushes: EvalUpdatePush[] = [];
+	setEvalsPublisher((push) => pushes.push(push));
+	startRun({ experimentId: "exp-1", confirmedBudget, factory: okFactory });
+	await waitForTerminal(pushes);
+	expect(listTrials("exp-1")).toHaveLength(1);
 });
 
 test("only one run may be active; stopRun skips remaining trials", async () => {

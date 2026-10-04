@@ -23,8 +23,9 @@ imports `agent`.
   the host owns project scoping. Experiments are wire-shaped JSON envelopes
   (`<dataDir>/evals/experiments/<id>.json`, `{ projectId, experiment }`). Trial records append to
   the same `<dataDir>/evals/trials.jsonl` the dev CLI uses — one corpus, two consumers.
-- **Promotion** (`promoteSession`): resolves the session file via pi's `SessionManager.list(cwd)`
-  (cwd = the workspace's worktree; lazy `PI_CODING_AGENT_DIR` resolution per the repo rule), reads
+- **Promotion** (`promoteSession`): resolves the session file via pi's
+  `SessionManager.findById(cwd, id)` (cwd = the workspace's worktree; lazy `PI_CODING_AGENT_DIR`
+  resolution per the repo rule), reads
   the [[submodule-server-session-baseline]] marker, and delegates to the package's
   `promoteFixture`. No marker, an `unavailable` marker, or an unknown session fail with the
   explanatory message the UI shows verbatim.
@@ -44,7 +45,7 @@ imports `agent`.
 ## Boundary
 
 - **Allowed deps:** `@thinkrail/evals`, `@thinkrail/contracts` (wire types),
-  `@earendil-works/pi-coding-agent` (`SessionManager.list` for session-file resolution),
+  `@earendil-works/pi-coding-agent` (`SessionManager.findById` for session-file resolution),
   `session-baseline` (marker reads), `log`, `persistence` (`dataDir`), Node.
 - **Forbidden:** `agent` (the session factory arrives injected from `host` — the reviews-pattern
   composition), `host`, anything browser-side.

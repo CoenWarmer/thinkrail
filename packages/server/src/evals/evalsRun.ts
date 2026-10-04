@@ -55,14 +55,21 @@ export function startRun(opts: {
 	const fixture = loadFixture(wireExperiment.fixtureId);
 	const totalTrials = wireExperiment.conditions.length * wireExperiment.trialsPerCondition;
 	const confirmed = opts.confirmedBudget;
+	const budgetKeys = ["maxTurns", "maxToolCalls", "maxWallMs", "maxCostUsd"] as const;
+	const budgetMatches = budgetKeys.every(
+		(key) => confirmed.trialBudget[key] === wireExperiment.trialBudget[key],
+	);
 	if (
-		JSON.stringify(confirmed.trialBudget) !== JSON.stringify(wireExperiment.trialBudget) ||
+		!budgetMatches ||
 		confirmed.experimentMaxCostUsd !== wireExperiment.experimentMaxCostUsd ||
 		confirmed.totalTrials !== totalTrials
 	)
 		throw new Error(
 			"Budget confirmation does not match the stored experiment — re-open the run dialog.",
 		);
+
+	const workDir = join(evalsRoot(), "work");
+	mkdirSync(workDir, { recursive: true });
 
 	const experiment: Experiment = { version: 1, ...wireExperiment };
 	const run: ActiveRun = {
@@ -104,8 +111,6 @@ export function startRun(opts: {
 		return session;
 	};
 
-	const workDir = join(evalsRoot(), "work");
-	mkdirSync(workDir, { recursive: true });
 	run.done = runExperiment(
 		{
 			fixturesRoot: fixturesRoot(),

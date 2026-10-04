@@ -54,6 +54,7 @@ import {
 } from "../auth";
 import { redeliverInterview, releaseInterview, setFeedbackPublisher } from "../feedback";
 import { logger } from "../log";
+import { handleMetricsIngest, METRICS_INGEST_PREFIX, setMetricsPublisher } from "../metrics";
 import { loadWorkspaces } from "../persistence";
 import {
 	getProjects,
@@ -248,6 +249,9 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 			if (url.pathname.startsWith(BLOB_PREFIX)) {
 				return serveBlob(url.pathname, req.signal);
 			}
+			if (url.pathname.startsWith(METRICS_INGEST_PREFIX)) {
+				return handleMetricsIngest(req, url.pathname);
+			}
 			if (staticDir) {
 				return serveStatic(url.pathname, staticDir);
 			}
@@ -282,6 +286,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 				if (hostUpdate) ws.subscribe(WS_CHANNELS.hostUpdateAvailable);
 				ws.subscribe(WS_CHANNELS.reviewChanged);
 				ws.subscribe(WS_CHANNELS.reviewFailed);
+				ws.subscribe(WS_CHANNELS.metricsUpdated);
 				const hostPlatform: HostPlatform =
 					process.platform === "darwin" || process.platform === "win32"
 						? process.platform
@@ -558,6 +563,12 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 	setWatchPublisher(publishFsChanged);
 	setSkillPathClassifier(isProjectSkillPath);
 	setFsNudgePublisher(publishFsChanged);
+	setMetricsPublisher((payload) => {
+		server.publish(
+			WS_CHANNELS.metricsUpdated,
+			JSON.stringify({ channel: WS_CHANNELS.metricsUpdated, data: payload }),
+		);
+	});
 
 	setRepoMetaPublisher((workspaceId) => {
 		refreshUserOwnedWorkspace(workspaceId);
@@ -726,6 +737,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 		closeAllTerminals();
 		setFeedbackPublisher(null);
 		setSettingsPublisher(null);
+		setMetricsPublisher(null);
 		setJbcentralAppliedPublisher(() => {});
 		setJbcentralChangedPublisher(() => {});
 		server.stop(true);

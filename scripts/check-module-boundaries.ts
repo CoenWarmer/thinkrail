@@ -33,6 +33,7 @@ const MODULE_RULES: readonly ModuleRule[] = [
 		root: "packages/server",
 		allowed: [
 			"packages/contracts",
+			"packages/evals",
 			"packages/shared",
 			"packages/spec-graph",
 			"packages/pi-delegation",

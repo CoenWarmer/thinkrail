@@ -92,6 +92,7 @@ internals**. The edges between them are owned here (see the dependency graph), n
 | `editors` | detect installed editors/IDEs, launch one at a worktree, reveal a worktree in the file manager | [editors/SPEC.md](src/editors/SPEC.md) |
 | `history` | prompt recall + conversation search over pi's session files | [history/SPEC.md](src/history/SPEC.md) |
 | `session-baseline` | per-session start-state markers (HEAD + dirty patch) for retroactive eval-fixture promotion | [session-baseline/SPEC.md](src/session-baseline/SPEC.md) |
+| `evals` | experiment lifecycle: fixture/experiment stores + the single active run over `@thinkrail/evals` | [evals/SPEC.md](src/evals/SPEC.md) |
 | `templates` | file CRUD over pi's prompt-template dirs (global + project scoped) | [templates/SPEC.md](src/templates/SPEC.md) |
 
 `src/index.ts` re-exports `host` + the `agent` barrel's `registerBundledRuntime` seam; explicit package
@@ -131,6 +132,9 @@ the host from env via `bootHost` for dev/e2e.
   opaque Central paths through its public generation seam
 - `session-baseline` → `git`, `log`, `persistence` (`dataDir`) — never `agent`: the host composes capture
   beside session creation
+- `evals` → `session-baseline` (marker reads), `log`, `persistence` (`dataDir`) — never `agent`: `host`
+  injects the trial session factory at `eval.run` (the reviews-pattern composition) and installs its
+  `setEvalsPublisher` seam
 - `persistence`, `dialog`, `history`, `templates`, `subprocess`, `trash` → (leaves)
 
 Rules: features never import `host`, and never each other except the edges above. The graph is acyclic.

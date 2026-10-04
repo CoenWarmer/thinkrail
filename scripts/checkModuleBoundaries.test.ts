@@ -45,6 +45,7 @@ function fixture(): string {
 		"packages/pi-dag": { "pi-delegation": "workspace:*" },
 		"packages/server": {
 			"@thinkrail/contracts": "workspace:*",
+			"@thinkrail/evals": "workspace:*",
 			"@thinkrail/shared": "workspace:*",
 			"pi-delegation": "workspace:*",
 			"pi-background-commands": "workspace:*",

@@ -26,6 +26,8 @@ export type RunnerDeps = {
 	createSession: TrialSessionFactory;
 	validations?: ValidationSpec[];
 	log?: (line: string) => void;
+	shouldStop?: () => boolean;
+	onTrialRecord?: (record: TrialRecord) => void;
 };
 
 export async function runExperiment(
@@ -43,6 +45,10 @@ export async function runExperiment(
 	for (const condition of experiment.conditions) {
 		const resolved = resolveCondition(fixture.config, condition);
 		for (let trial = 1; trial <= experiment.trialsPerCondition; trial++) {
+			if (deps.shouldStop?.()) {
+				log(`experiment ${experiment.id}: stop requested — remaining trials skipped`);
+				return records;
+			}
 			if (
 				experiment.experimentMaxCostUsd !== undefined &&
 				spentUsd >= experiment.experimentMaxCostUsd
@@ -56,6 +62,7 @@ export async function runExperiment(
 			const record = await runTrial(deps, experiment, fixture, resolved, trial);
 			appendRecord(deps.recordPath, record);
 			records.push(record);
+			deps.onTrialRecord?.(record);
 			spentUsd += record.event?.costUsd ?? 0;
 			log(
 				`trial ${condition.id}#${trial} ${record.status} (verdict ${record.verdict.pass ? "pass" : "fail"})`,

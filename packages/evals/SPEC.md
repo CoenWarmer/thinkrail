@@ -48,7 +48,9 @@ Decision #20 owns the experimental model and its rejected alternatives). This pa
   a tripped trial budget stops further turns (and calls `abort` when offered) and records
   `budget-exceeded`; the experiment-level cost cap stops **launching** later trials — skipped
   trials produce no records (the report simply shows fewer trials), which is honest rather than
-  fabricating untried rows.
+  fabricating untried rows. Two optional consumer hooks: `shouldStop` (checked before each trial —
+  the embedder's cancellation seam; stopping mid-trial is the embedder's job via the session it
+  handed out) and `onTrialRecord` (fires after each record is appended — live progress for a UI).
 - **Report** — per-condition aggregation and deltas consumed by the eval CLI
   (`summarizeByCondition` groups in first-seen order; `renderReport` shows outcome counts,
   pass rates, and averages with deltas against the first condition).

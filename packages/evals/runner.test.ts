@@ -180,6 +180,26 @@ test("the experiment cost cap stops launching later trials", async () => {
 	expect(records.length).toBe(1);
 });
 
+test("shouldStop halts before the next trial and onTrialRecord streams records", async () => {
+	const seen: string[] = [];
+	let stop = false;
+	const factory = scriptedFactory(({ emit }) => {
+		emit({ type: "turn_end" });
+		stop = true;
+	});
+	const d = deps(factory, {
+		shouldStop: () => stop,
+		onTrialRecord: (record) => seen.push(`${record.conditionId}#${record.trial}`),
+	});
+	const records = await runExperiment(
+		d,
+		{ ...experiment, conditions: [{ id: "baseline" }], trialsPerCondition: 3 },
+		fixture,
+	);
+	expect(records).toHaveLength(1);
+	expect(seen).toEqual(["baseline#1"]);
+});
+
 test("a crashing session records a crashed trial with a failed verdict, never silence", async () => {
 	const factory: TrialSessionFactory = async () => ({
 		sessionId: "boom",

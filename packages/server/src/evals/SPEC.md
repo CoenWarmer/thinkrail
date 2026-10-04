@@ -39,6 +39,10 @@ imports `agent`.
 - **Push.** `setEvalsPublisher` (the standard publisher-injection seam) broadcasts `EvalUpdatePush`
   (run state + just-appended trial records); updates are throttled to ~1 s except lifecycle edges
   (start/trial-end/terminal), which always publish.
+- **Trial transcripts are disk reads** (`readTrialTranscript`): pi appends live messages to the
+  session file, so one `SessionManager.findById` + jsonl parse serves both a running and a finished
+  trial — never an agent attach (which would leak resident entries under synthetic workspaces and
+  trip the manager's workspace-id check). Torn live tail lines are skipped by design.
 - Wire↔package mapping (`EvalExperiment` ↔ `Experiment`, `TrialRecord` → `EvalTrialRecord`) is this
   module's job; neither contracts nor the package knows the other.
 

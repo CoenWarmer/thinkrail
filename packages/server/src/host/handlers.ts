@@ -98,11 +98,11 @@ import { selectDirectory } from "../dialog";
 import { listAvailableEditors, openEditor, revealInFileManager } from "../editors";
 import {
 	currentRunState as currentEvalRunState,
-	trialWorkspacePath as evalTrialWorkspacePath,
 	listExperiments as listEvalExperiments,
 	listFixtures as listEvalFixtures,
 	listTrials as listEvalTrials,
 	promoteSession as promoteEvalSession,
+	readTrialTranscript as readEvalTrialTranscript,
 	saveExperiment as saveEvalExperiment,
 	startRun as startEvalRun,
 	stopRun as stopEvalRun,
@@ -1248,16 +1248,14 @@ const handlers: Record<string, Handler> = {
 		const p = params as { experimentId: string };
 		return { stopping: stopEvalRun(p.experimentId) };
 	},
-	"eval.trialMessages": async (params) => {
+	"eval.trialMessages": (params) => {
 		const p = params as {
 			experimentId: string;
 			conditionId: string;
 			trial: number;
 			sessionId: string;
 		};
-		const cwd = evalTrialWorkspacePath(p.experimentId, p.conditionId, p.trial);
-		const result = await getSessionMessages(p.sessionId, `eval:${p.experimentId}`, cwd);
-		return { messages: result.messages };
+		return readEvalTrialTranscript(p);
 	},
 	"template.list": (params) => ({
 		templates: listTemplates(resolveTemplateReadDirs(params as TemplateReadLocation)),

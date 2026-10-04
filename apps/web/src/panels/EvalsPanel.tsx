@@ -87,6 +87,7 @@ function RunBanner({
 	run: NonNullable<ReturnType<typeof useAppStore.getState>["evalRun"]>;
 	onError: (err: unknown) => void;
 }) {
+	const [watching, setWatching] = useState(false);
 	return (
 		<div
 			className="rounded-[var(--radius-sm)] border border-control-border-default bg-control-bg px-8 py-8 tr-text-metadata"
@@ -109,10 +110,30 @@ function RunBanner({
 				</Button>
 			</div>
 			{run.activeTrial ? (
-				<div className="text-text-muted">
+				<button
+					type="button"
+					className="text-text-muted underline hover:text-text-default"
+					data-testid="eval-active-trial"
+					disabled={run.activeTrial.sessionId === ""}
+					onClick={() => setWatching(true)}
+				>
 					active: {run.activeTrial.conditionId}#{run.activeTrial.trial}
-					{run.activeTrial.costUsd !== null ? ` — $${run.activeTrial.costUsd.toFixed(4)}` : ""}
-				</div>
+					{run.activeTrial.costUsd !== null ? ` — $${run.activeTrial.costUsd.toFixed(4)}` : ""} —
+					watch
+				</button>
+			) : null}
+			{watching && run.activeTrial && run.activeTrial.sessionId !== "" ? (
+				<TrialTranscriptDialog
+					trial={{
+						experimentId: run.experimentId,
+						conditionId: run.activeTrial.conditionId,
+						trial: run.activeTrial.trial,
+						sessionId: run.activeTrial.sessionId,
+						status: "running",
+					}}
+					onClose={() => setWatching(false)}
+					onError={onError}
+				/>
 			) : null}
 		</div>
 	);
@@ -415,8 +436,7 @@ function ExperimentRow({
 			) : null}
 			{inspecting ? (
 				<TrialTranscriptDialog
-					experimentId={experiment.id}
-					trial={inspecting}
+					trial={toTrialRef(experiment.id, inspecting)}
 					onClose={() => setInspecting(null)}
 					onError={onError}
 				/>
@@ -581,15 +601,27 @@ function ExperimentComposer({
 	);
 }
 
-function TrialTranscript({
-	experimentId,
-	trial,
-	onError,
-}: {
+type TrialRef = {
 	experimentId: string;
-	trial: EvalTrialRecord;
-	onError: (err: unknown) => void;
-}) {
+	conditionId: string;
+	trial: number;
+	sessionId: string;
+	status: string;
+	costUsd?: number | null;
+};
+
+function toTrialRef(experimentId: string, record: EvalTrialRecord): TrialRef {
+	return {
+		experimentId,
+		conditionId: record.conditionId,
+		trial: record.trial,
+		sessionId: record.sessionId,
+		status: record.status,
+		costUsd: record.event?.costUsd ?? null,
+	};
+}
+
+function TrialTranscript({ trial, onError }: { trial: TrialRef; onError: (err: unknown) => void }) {
 	const [messages, setMessages] = useState<TranscriptMessage[] | null>(null);
 	const live = useAppStore(
 		(s) => s.evalRun?.activeTrial?.sessionId === trial.sessionId && trial.sessionId !== "",
@@ -602,7 +634,7 @@ function TrialTranscript({
 		let cancelled = false;
 		getTransport()
 			.request("eval.trialMessages", {
-				experimentId,
+				experimentId: trial.experimentId,
 				conditionId: trial.conditionId,
 				trial: trial.trial,
 				sessionId: trial.sessionId,
@@ -616,7 +648,7 @@ function TrialTranscript({
 		return () => {
 			cancelled = true;
 		};
-	}, [experimentId, trial.conditionId, trial.trial, trial.sessionId, onError, liveTick]);
+	}, [trial.experimentId, trial.conditionId, trial.trial, trial.sessionId, onError, liveTick]);
 
 	if (messages === null)
 		return <div className="tr-text-metadata text-text-muted">Loading transcript…</div>;
@@ -665,13 +697,11 @@ function transcriptText(content: unknown): string {
 }
 
 function TrialTranscriptDialog({
-	experimentId,
 	trial,
 	onClose,
 	onError,
 }: {
-	experimentId: string;
-	trial: EvalTrialRecord;
+	trial: TrialRef;
 	onClose: () => void;
 	onError: (err: unknown) => void;
 }) {
@@ -681,11 +711,11 @@ function TrialTranscriptDialog({
 				<DialogHeader>
 					<DialogTitle>
 						{trial.conditionId}#{trial.trial} — {trial.status}
-						{trial.event?.costUsd != null ? ` — $${trial.event.costUsd.toFixed(4)}` : ""}
+						{trial.costUsd != null ? ` — $${trial.costUsd.toFixed(4)}` : ""}
 					</DialogTitle>
 				</DialogHeader>
 				<div className="max-h-[60vh] overflow-y-auto">
-					<TrialTranscript experimentId={experimentId} trial={trial} onError={onError} />
+					<TrialTranscript trial={trial} onError={onError} />
 				</div>
 			</DialogContent>
 		</Dialog>
@@ -764,8 +794,7 @@ function CompareDialog({
 							<div className="max-h-[45vh] overflow-y-auto">
 								{column.data.latest ? (
 									<TrialTranscript
-										experimentId={experimentId}
-										trial={column.data.latest}
+										trial={toTrialRef(experimentId, column.data.latest)}
 										onError={onError}
 									/>
 								) : (

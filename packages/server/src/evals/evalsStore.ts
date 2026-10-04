@@ -114,6 +114,28 @@ export async function promoteSession(opts: {
 	return toWireFixture(fixture);
 }
 
+export function readTrialTranscript(opts: {
+	experimentId: string;
+	conditionId: string;
+	trial: number;
+	sessionId: string;
+}): { messages: unknown[] } {
+	const cwd = trialWorkspacePath(opts.experimentId, opts.conditionId, opts.trial);
+	const path = SessionManager.findById(cwd, opts.sessionId);
+	if (!path) throw new Error(`Trial session ${opts.sessionId} was not found.`);
+	const messages: unknown[] = [];
+	for (const line of readFileSync(path, "utf8").split("\n")) {
+		if (!line.trim()) continue;
+		try {
+			const entry = JSON.parse(line) as { type?: string; message?: unknown };
+			if (entry.type === "message" && entry.message) messages.push(entry.message);
+		} catch {
+			// a torn live tail line is expected mid-write
+		}
+	}
+	return { messages };
+}
+
 type ExperimentEnvelope = { projectId: string; experiment: EvalExperiment };
 
 export function saveExperiment(projectId: string, experiment: EvalExperiment): EvalExperiment {

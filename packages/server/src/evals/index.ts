@@ -4,6 +4,7 @@ export {
 	listFixtures,
 	listTrials,
 	promoteSession,
+	readTrialTranscript,
 	saveExperiment,
 	trialWorkspacePath,
 } from "./evalsStore";

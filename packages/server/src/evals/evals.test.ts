@@ -12,7 +12,9 @@ import {
 	listFixtures,
 	listTrials,
 	promoteSession,
+	readTrialTranscript,
 	saveExperiment,
+	trialWorkspacePath,
 } from "./evalsStore";
 
 let dataDir: string;
@@ -137,6 +139,39 @@ test("startRun verifies the confirmed budget and publishes a terminal update", a
 	expect(trials[0]?.event?.costUsd).toBeCloseTo(0.01);
 	const withRecord = pushes.find((p) => p.trialAppended);
 	expect(withRecord?.trialAppended?.conditionId).toBe("baseline");
+});
+
+test("readTrialTranscript reads a trial's session file from disk, live or done", async () => {
+	const trialCwd = trialWorkspacePath("exp-t", "baseline", 1);
+	mkdirSync(trialCwd, { recursive: true });
+	const manager = SessionManager.create(trialCwd);
+	manager.appendMessage({ role: "user", content: "do it", timestamp: Date.now() } as never);
+	manager.appendMessage({
+		role: "assistant",
+		content: [{ type: "text", text: "done" }],
+		api: "anthropic-messages",
+		provider: "p",
+		model: "m",
+		usage: {},
+		stopReason: "stop",
+		timestamp: Date.now(),
+	} as never);
+	const result = readTrialTranscript({
+		experimentId: "exp-t",
+		conditionId: "baseline",
+		trial: 1,
+		sessionId: manager.getSessionId(),
+	});
+	expect(result.messages).toHaveLength(2);
+	expect((result.messages[0] as { role: string }).role).toBe("user");
+	expect(() =>
+		readTrialTranscript({
+			experimentId: "exp-t",
+			conditionId: "baseline",
+			trial: 1,
+			sessionId: "nope",
+		}),
+	).toThrow(/not found/);
 });
 
 test("a failed synchronous setup never wedges the one-active-run latch", async () => {

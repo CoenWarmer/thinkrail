@@ -1,6 +1,7 @@
 import type {
 	Ack,
 	AppConfig,
+	EvalUpdatePush,
 	ExtUiRequest,
 	HostUpdateNotice,
 	LoginPush,
@@ -281,6 +282,10 @@ export function initTransport(): WsTransport {
 	transport.subscribe(WS_CHANNELS.reviewChanged, (data) => {
 		const payload = data as ReviewChangedPayload;
 		useAppStore.getState().applyReviewChanged(payload);
+	});
+
+	transport.subscribe(WS_CHANNELS.evalUpdate, (data) => {
+		useAppStore.getState().applyEvalUpdate(data as EvalUpdatePush);
 	});
 
 	transport.subscribe(WS_CHANNELS.workspaceFsChanged, (data) => {

@@ -2,6 +2,11 @@ import type {
 	AppConfig,
 	AskUserQuestionResult,
 	ComposerGrowthLimit,
+	EvalExperiment,
+	EvalFixtureSummary,
+	EvalRunState,
+	EvalTrialRecord,
+	EvalUpdatePush,
 	ExtUiRequest,
 	GitDiffScope,
 	HostPlatform,
@@ -878,6 +883,9 @@ interface AppState {
 	} | null;
 	specsByWorkspace: Record<string, SpecGraphNode[]>;
 	reviewsByWorkspace: Record<string, ReviewSnapshot>;
+	evalsByProject: Record<string, { fixtures: EvalFixtureSummary[]; experiments: EvalExperiment[] }>;
+	evalRun: EvalRunState | null;
+	evalTrialsByExperiment: Record<string, EvalTrialRecord[]>;
 	reviewFocusRequest: { workspaceId: string; commentId: string } | null;
 	fsChangesByWorkspace: Record<string, { tick: number; paths: string[]; truncated: boolean }>;
 	skillChangeTickByWorkspace: Record<string, number>;
@@ -1109,6 +1117,13 @@ interface AppState {
 	clearSpecRequest: () => void;
 	setWorkspaceSpecs: (workspaceId: string, nodes: SpecGraphNode[]) => void;
 	setWorkspaceReview: (workspaceId: string, snapshot: ReviewSnapshot) => void;
+	setProjectEvals: (
+		projectId: string,
+		evals: { fixtures: EvalFixtureSummary[]; experiments: EvalExperiment[] },
+		run: EvalRunState | null,
+	) => void;
+	setEvalTrials: (experimentId: string, trials: EvalTrialRecord[]) => void;
+	applyEvalUpdate: (push: EvalUpdatePush) => void;
 	requestReviewFocus: (workspaceId: string, commentId: string) => void;
 	clearReviewFocus: (commentId?: string) => void;
 	applyReviewChanged: (payload: ReviewChangedPayload) => void;
@@ -1890,6 +1905,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 	specRequest: null,
 	specsByWorkspace: {},
 	reviewsByWorkspace: {},
+	evalsByProject: {},
+	evalRun: null,
+	evalTrialsByExperiment: {},
 	reviewFocusRequest: null,
 	changesView: "list",
 	diffScopeByWorkspace: {},
@@ -3726,6 +3744,35 @@ export const useAppStore = create<AppState>((set, get) => ({
 			return sameReviewSnapshot(s.reviewsByWorkspace[payload.workspaceId], next)
 				? {}
 				: { reviewsByWorkspace: { ...s.reviewsByWorkspace, [payload.workspaceId]: next } };
+		}),
+	setProjectEvals: (projectId, evals, run) =>
+		set((s) => ({
+			evalsByProject: { ...s.evalsByProject, [projectId]: evals },
+			evalRun: run,
+		})),
+	setEvalTrials: (experimentId, trials) =>
+		set((s) => ({
+			evalTrialsByExperiment: { ...s.evalTrialsByExperiment, [experimentId]: trials },
+		})),
+	applyEvalUpdate: (push) =>
+		set((s) => {
+			const next: Partial<AppState> = { evalRun: push.run };
+			const appended = push.trialAppended;
+			if (appended) {
+				const existing = s.evalTrialsByExperiment[appended.experimentId];
+				if (
+					existing &&
+					!existing.some(
+						(t) => t.conditionId === appended.conditionId && t.trial === appended.trial,
+					)
+				) {
+					next.evalTrialsByExperiment = {
+						...s.evalTrialsByExperiment,
+						[appended.experimentId]: [...existing, appended],
+					};
+				}
+			}
+			return next;
 		}),
 	pushToast: (toast) => {
 		const twin = get().toasts.find(

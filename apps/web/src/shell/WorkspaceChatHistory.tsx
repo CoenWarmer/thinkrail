@@ -1,10 +1,12 @@
 import {
+	RiFlaskLine as Flask,
 	RiHistoryLine as History,
 	RiLoader4Line as Loader2,
 	RiPencilLine as Pencil,
 	RiArrowGoBackLine as RotateCcw,
 	RiDeleteBin6Line as Trash2,
 } from "@remixicon/react";
+import { EVALS_PROTOCOL_VERSION } from "@thinkrail/contracts";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { menuItemClass } from "../components/ui/menu-styles";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -204,6 +206,7 @@ function ClosedChatRow({
 					</IconTooltip>
 				)
 			) : null}
+			<PromoteToFixtureButton workspaceId={workspaceId} chat={chat} />
 			<IconTooltip label="Move chat to trash">
 				<button
 					type="button"
@@ -230,6 +233,33 @@ function ClosedChatRow({
 				</button>
 			</IconTooltip>
 		</div>
+	);
+}
+
+function PromoteToFixtureButton({ workspaceId, chat }: { workspaceId: string; chat: ClosedChat }) {
+	const supported = useAppStore(
+		(s) => s.protocolVersion !== null && s.protocolVersion >= EVALS_PROTOCOL_VERSION,
+	);
+	if (!supported) return null;
+	return (
+		<IconTooltip label="Promote to eval fixture">
+			<button
+				type="button"
+				data-testid="closed-chat-promote"
+				aria-label={`Promote ${chat.title} to an eval fixture`}
+				onClick={() => {
+					void getTransport()
+						.request("eval.promote", { workspaceId, sessionId: chat.sessionId })
+						.then((result) =>
+							toast.success(`Fixture ${result.fixture.id} created — see the Evals panel.`),
+						)
+						.catch((error) => toast.error(errorText(error), "Couldn't promote the chat"));
+				}}
+				className={cn(menuItemClass, "shrink-0 px-4 text-text-muted")}
+			>
+				<Flask className="size-14" />
+			</button>
+		</IconTooltip>
 	);
 }
 

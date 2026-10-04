@@ -9,6 +9,8 @@ import type {
 	LayoutPreset,
 	LoginFrame,
 	LoginPush,
+	MetricsSummary,
+	MetricsUpdatedPayload,
 	PiEvent,
 	Project,
 	RefreshedModels,
@@ -880,6 +882,10 @@ interface AppState {
 	reviewsByWorkspace: Record<string, ReviewSnapshot>;
 	reviewFocusRequest: { workspaceId: string; commentId: string } | null;
 	fsChangesByWorkspace: Record<string, { tick: number; paths: string[]; truncated: boolean }>;
+	metricsByWorkspace: Record<
+		string,
+		{ tick: number; paths: string[]; summary: MetricsSummary | null }
+	>;
 	skillChangeTickByWorkspace: Record<string, number>;
 	skillsSyncedTickBySession: Record<string, number>;
 	activeLogin: LoginState | null;
@@ -979,6 +985,10 @@ interface AppState {
 	diffScopeByWorkspace: Record<string, GitDiffScope>;
 	setDiffScope: (workspaceId: string, scope: GitDiffScope) => void;
 	noteFsChanged: (payload: WorkspaceFsChangedPayload) => void;
+	noteMetricsUpdated: (payload: MetricsUpdatedPayload) => void;
+	setMetricsSummary: (workspaceId: string, summary: MetricsSummary) => void;
+	metricsLayerVisible: boolean;
+	setMetricsLayerVisible: (visible: boolean) => void;
 	markSkillsSynced: (sessionId: string, syncedTick: number) => void;
 	updateFileTabContent: (
 		workspaceId: string,
@@ -1896,6 +1906,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 	chatLocationRequest: null,
 	historyOpenRequest: null,
 	fsChangesByWorkspace: {},
+	metricsByWorkspace: {},
+	metricsLayerVisible: true,
 	skillChangeTickByWorkspace: {},
 	skillsSyncedTickBySession: {},
 	activeLogin: null,
@@ -2127,6 +2139,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 						? null
 						: state.pendingWorkspaceChatActivation,
 				fsChangesByWorkspace: omitKey(state.fsChangesByWorkspace, workspaceId),
+				metricsByWorkspace: omitKey(state.metricsByWorkspace, workspaceId),
 				resourceSnapshots: omitKey(state.resourceSnapshots, workspaceId),
 				sessionStateByWorkspace: omitKey(state.sessionStateByWorkspace, workspaceId),
 				skillChangeTickByWorkspace: omitKey(state.skillChangeTickByWorkspace, workspaceId),
@@ -2573,6 +2586,33 @@ export const useAppStore = create<AppState>((set, get) => ({
 							},
 						}
 					: {}),
+			};
+		}),
+	noteMetricsUpdated: (payload) =>
+		set((s) => {
+			if (s.removedWorkspaceIds[payload.workspaceId]) return {};
+			const prev = s.metricsByWorkspace[payload.workspaceId];
+			return {
+				metricsByWorkspace: {
+					...s.metricsByWorkspace,
+					[payload.workspaceId]: {
+						tick: (prev?.tick ?? 0) + 1,
+						paths: payload.paths,
+						summary: prev?.summary ?? null,
+					},
+				},
+			};
+		}),
+	setMetricsLayerVisible: (visible) => set({ metricsLayerVisible: visible }),
+	setMetricsSummary: (workspaceId, summary) =>
+		set((s) => {
+			if (s.removedWorkspaceIds[workspaceId]) return {};
+			const prev = s.metricsByWorkspace[workspaceId];
+			return {
+				metricsByWorkspace: {
+					...s.metricsByWorkspace,
+					[workspaceId]: { tick: prev?.tick ?? 0, paths: prev?.paths ?? [], summary },
+				},
 			};
 		}),
 	markSkillsSynced: (sessionId, syncedTick) =>

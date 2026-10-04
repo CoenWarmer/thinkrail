@@ -7,6 +7,7 @@ export function ChatHeader({
 	stats,
 	statusEntries,
 	left,
+	metrics,
 	resources,
 	onOpenSkills,
 	skillsStale,
@@ -14,6 +15,7 @@ export function ChatHeader({
 	stats: SessionStats | null;
 	statusEntries: [string, string][];
 	left?: ReactNode;
+	metrics?: ReactNode;
 	resources?: ReactNode;
 	onOpenSkills?: () => void;
 	skillsStale?: boolean;
@@ -25,6 +27,7 @@ export function ChatHeader({
 		>
 			<div className="flex min-w-0 flex-1 items-center overflow-clip">{left}</div>
 			<div className="flex min-w-0 items-center justify-end gap-12 overflow-clip">
+				{metrics}
 				{statusEntries.map(([key, text]) => (
 					<span key={key} className="min-w-0 truncate text-text-muted tr-text-metadata">
 						{text}

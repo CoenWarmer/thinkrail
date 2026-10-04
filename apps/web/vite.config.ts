@@ -23,6 +23,7 @@ export default defineConfig({
 			},
 			"/files": { target: `http://localhost:${hostPort}` },
 			"/blob": { target: `http://localhost:${hostPort}` },
+			"/ingest": { target: `http://localhost:${hostPort}` },
 		},
 	},
 	build: {

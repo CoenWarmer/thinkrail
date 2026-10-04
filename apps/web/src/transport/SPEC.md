@@ -69,7 +69,7 @@ batches high-frequency Pi events without allowing later wire messages to overtak
   `provider.status`), each valid `server.welcome` first clearing any popup projection left by a host restart,
   then `feedback.interview` via the idempotent `showInterviewPrompt()` (a surviving host claim re-delivers the
   addressed event immediately after welcome),
-  `workspace.fsChanged` via `noteFsChanged(payload)`, and **`settings.changed`** via `applyConfig(config)` — the post-startup server-synced app config broadcast;
+  `workspace.fsChanged` via `noteFsChanged(payload)`, `metrics.updated` via `noteMetricsUpdated(payload)`, and **`settings.changed`** via `applyConfig(config)` — the post-startup server-synced app config broadcast;
   welcome config lands in the atomic install above.
 
   **Session state hydrates on every supported welcome.** `session.stateList` is tokenized by connection

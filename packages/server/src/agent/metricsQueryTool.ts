@@ -100,7 +100,7 @@ function renderOutcome(outcome: MetricsQueryOutcome, params: MetricsQueryParams)
 	const count = params.limit ?? 10;
 	return [
 		...header,
-		`Hottest ${Math.min(count, rows.length)} locations by call count:`,
+		`Hottest ${Math.min(count, rows.length)} locations by hotness (p95 × calls):`,
 		...rows,
 	].join("\n");
 }

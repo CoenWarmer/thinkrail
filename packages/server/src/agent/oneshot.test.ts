@@ -55,6 +55,33 @@ test("completeOnce throws 'no-model' when nothing is authenticated", async () =>
 	await expect(completeOnce({ prompt: "hi" })).rejects.toThrow("no-model");
 });
 
+test("completeOnce surfaces a stopReason=error message as a thrown error", async () => {
+	const faux = createFauxCore({
+		provider: "anthropic",
+		api: "faux-anthropic",
+		models: [modelDef("claude-haiku-faux")],
+		tokensPerSecond: 5000,
+	});
+	const runtime = await ModelRuntime.create({
+		credentials: new InMemoryCredentialStore(),
+		modelsPath: null,
+		allowModelNetwork: false,
+	});
+	runtime.registerProvider("anthropic", {
+		api: "faux-anthropic",
+		baseUrl: "http://faux.local",
+		apiKey: "faux",
+		streamSimple: faux.streamSimple,
+		models: [{ ...modelDef("claude-haiku-faux"), api: "faux-anthropic" }],
+	});
+	configurePiRuntime(runtime);
+	faux.setResponses([
+		fauxAssistantMessage("", { stopReason: "error", errorMessage: "blocked by policy" }),
+	]);
+
+	await expect(completeOnce({ prompt: "hi" })).rejects.toThrow("blocked by policy");
+});
+
 test("completeOnce dispatches a single request on the picked model and returns its text", async () => {
 	const faux = createFauxCore({
 		provider: "anthropic",

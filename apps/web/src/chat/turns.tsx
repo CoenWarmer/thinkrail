@@ -6,6 +6,8 @@ import {
 	RiTimeLine as Clock,
 	RiFileTextLine as FileText,
 	RiContractUpDownLine as FoldVertical,
+	RiGuideLine as Guide,
+	RiLoader4Line as Loader,
 	RiLoopRightLine as RotateCw,
 	RiAlertLine as TriangleAlert,
 	RiToolsLine as Wrench,
@@ -48,6 +50,8 @@ export function ChatTurnView({
 	onOpenSpec,
 	onOpenChange,
 	onReveal,
+	onWalkthrough,
+	walkthroughBusy,
 	onTryAgain,
 }: {
 	row: ChatRow;
@@ -58,6 +62,8 @@ export function ChatTurnView({
 	onOpenSpec?: ((path: string) => void) | undefined;
 	onOpenChange?: ((path: string) => void) | undefined;
 	onReveal?: ((tab: "specs" | "changes") => void) | undefined;
+	onWalkthrough?: ((paths: string[]) => void) | undefined;
+	walkthroughBusy?: boolean | undefined;
 	onTryAgain?: (() => void) | undefined;
 }) {
 	switch (row.kind) {
@@ -151,6 +157,8 @@ export function ChatTurnView({
 					onOpenSpec={onOpenSpec ?? (() => {})}
 					onOpenChange={onOpenChange ?? (() => {})}
 					onReveal={onReveal ?? (() => {})}
+					onWalkthrough={onWalkthrough}
+					walkthroughBusy={walkthroughBusy ?? false}
 				/>
 			);
 		default:
@@ -757,6 +765,8 @@ export function TurnDivider({
 	onOpenSpec,
 	onOpenChange,
 	onReveal,
+	onWalkthrough,
+	walkthroughBusy = false,
 }: {
 	id: string;
 	data: TurnDividerData;
@@ -764,6 +774,8 @@ export function TurnDivider({
 	onOpenSpec: (path: string) => void;
 	onOpenChange: (path: string) => void;
 	onReveal: (tab: "specs" | "changes") => void;
+	onWalkthrough?: ((paths: string[]) => void) | undefined;
+	walkthroughBusy?: boolean;
 }) {
 	const { elapsedMs, toolCount, specs, changedFiles } = data;
 	const [selected, select] = useSelection(`${id}:artifacts`);
@@ -814,6 +826,22 @@ export function TurnDivider({
 						onSelect={(event) => select(group.id, event)}
 					/>
 				))}
+				{onWalkthrough && changedFiles.length > 0 ? (
+					<button
+						type="button"
+						data-testid="turn-divider-walkthrough"
+						disabled={walkthroughBusy}
+						onClick={() => onWalkthrough(changedFiles)}
+						className="flex items-center gap-4 rounded-[var(--radius-sm)] px-4 text-primary hover:bg-control-bg-hovered disabled:pointer-events-none disabled:text-text-muted"
+					>
+						{walkthroughBusy ? (
+							<Loader className="size-12 shrink-0 animate-spin" />
+						) : (
+							<Guide className="size-12 shrink-0" />
+						)}
+						Walk me through it
+					</button>
+				) : null}
 				{elapsedMs != null && elapsedMs >= 1000 ? (
 					<span className="flex items-center gap-4">
 						<Clock className="size-12 shrink-0" />

@@ -74,6 +74,25 @@ export interface HunkActions {
 	agentWorking?: boolean;
 }
 
+export interface WalkthroughCardStep {
+	/** Global step index within the walkthrough (not per-file). */
+	index: number;
+	total: number;
+	title: string;
+	body: string;
+	side: "additions" | "deletions";
+	/** 0-based anchor line the card renders under (the line before the hunk). */
+	lineNumber: number;
+	active: boolean;
+}
+
+export interface DiffWalkthrough {
+	/** The walkthrough steps anchored in THIS file, carrying their global indices. */
+	steps: WalkthroughCardStep[];
+	/** Activate a step by global index; may navigate to another file's diff tab. */
+	onStep(index: number): void;
+}
+
 export interface ResourceDiffProps {
 	resource: ResourceDescriptor;
 	original: ResourceContent;
@@ -82,6 +101,7 @@ export interface ResourceDiffProps {
 	ignoreWhitespace: boolean;
 	review?: { worktree: SurfaceReview; base: SurfaceReview };
 	hunkActions?: HunkActions;
+	walkthrough?: DiffWalkthrough;
 	onPlacedThreadIds?(ids: ReadonlySet<string>): void;
 	viewState?: unknown;
 	onViewState?(state: unknown): void;

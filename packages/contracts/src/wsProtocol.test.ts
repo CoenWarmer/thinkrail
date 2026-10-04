@@ -25,6 +25,7 @@ import {
 	SUBAGENT_SETTINGS_PROTOCOL_VERSION,
 	THEME_SYSTEM_PROTOCOL_VERSION,
 	TODO_REVIEW_FIX_CUSTOM_TYPE,
+	WALKTHROUGH_PROTOCOL_VERSION,
 	WINDOWS_SHELL_SETTINGS_PROTOCOL_VERSION,
 	WS_CHANNELS,
 	WS_METHODS,
@@ -135,6 +136,12 @@ test("change mutations name their two methods at v75", () => {
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(CHANGE_MUTATIONS_PROTOCOL_VERSION);
 	expect(WS_METHODS.changeRevert).toBe("change.revert");
 	expect(WS_METHODS.changeUndo).toBe("change.undo");
+});
+
+test("walkthrough generation ships its method at v76", () => {
+	expect(WALKTHROUGH_PROTOCOL_VERSION).toBe(76);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(WALKTHROUGH_PROTOCOL_VERSION);
+	expect(WS_METHODS.walkthroughGenerate).toBe("walkthrough.generate");
 });
 
 test("resource metadata rides the two content reads from v75", () => {

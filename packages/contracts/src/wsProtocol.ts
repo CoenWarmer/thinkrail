@@ -49,6 +49,7 @@ import type {
 	TodoItem,
 	TodoPlan,
 	TodoStatus,
+	WalkthroughStep,
 	Workspace,
 } from "./domain";
 import { isDelegationRunDetails } from "./domain";
@@ -105,6 +106,7 @@ export type TemplateReadLocation =
 	| { workspaceId?: never; projectId?: never };
 
 export const PROTOCOL_VERSION = 76;
+export const WALKTHROUGH_PROTOCOL_VERSION = 76;
 export const METRICS_PROTOCOL_VERSION = 76;
 export const CHANGE_MUTATIONS_PROTOCOL_VERSION = 75;
 export const RESOURCE_META_PROTOCOL_VERSION = 75;
@@ -215,6 +217,7 @@ export const WS_METHODS = {
 	todoGenerateSummary: "todo.generateSummary",
 	gitStatus: "git.status",
 	gitDiffFile: "git.diffFile",
+	walkthroughGenerate: "walkthrough.generate",
 	gitListCommits: "git.listCommits",
 	changeRevert: "change.revert",
 	changeUndo: "change.undo",
@@ -582,6 +585,10 @@ export interface WsMethodMap {
 		};
 	};
 	"git.listCommits": { params: { workspaceId: string }; result: { commits: GitCommit[] } };
+	"walkthrough.generate": {
+		params: { workspaceId: string; scope?: GitDiffScope; sessionId?: string; paths?: string[] };
+		result: { steps: WalkthroughStep[] };
+	};
 	"change.revert": {
 		params: {
 			workspaceId: string;

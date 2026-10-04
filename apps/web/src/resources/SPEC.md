@@ -37,11 +37,22 @@ CAS-protected actions. The pane owns wire calls, scope and expectation hashes, u
 refresh, and error UI. An immutable scope omits `hunkActions`; renderers must then omit every mutation
 control rather than emulate one.
 
+`DiffWalkthrough` is the guided-tour contract on `ResourceDiffProps.walkthrough`: the pane hands a diff
+renderer only the steps anchored in *its* file, each a `WalkthroughCardStep` carrying its **global**
+walkthrough index and total (so "Step i of n" and Previous/Next cross files), a pane-computed **0-based**
+anchor `lineNumber` (the line before the hunk, modified side for `additions`, original side for
+`deletions`), and an `active` flag — at most one step is active app-wide. `onStep(index)` activates by
+global index and **may navigate to another file's diff tab**; the renderer never interprets indices as
+local. A renderer that cannot represent an anchor (collapsed context, whitespace-hidden hunk) simply drops
+that card; recovery stays available through the Changes-toolbar stepper (see `panels/SPEC.md`), which is
+why the prop carries no placement-report callback.
+
 ## Boundary
 
 - **Public surface:** `index.ts` exports `ResourceDescriptor`, `ResourceContent`, `AnchorDraft`,
   `ReviewThread`, `ReviewThreadActions`, `SurfaceReview`, `ResourceViewProps`, `ResourceDiffProps`
-  (both including an optional actual-placement callback), `HunkActions`, `ResourceRenderer` and its support
+  (both including an optional actual-placement callback), `HunkActions`, `DiffWalkthrough`,
+  `WalkthroughCardStep`, `ResourceRenderer` and its support
   types, plus `registerResourceRenderer`,
   `resolveRenderers`, `describeResource`, `anchorLabel`, and `isPlaceable`.
 - **Allowed deps:** `@thinkrail/contracts` types, the `lib` barrel, and React types.

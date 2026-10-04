@@ -48,6 +48,9 @@ packages/pi-subagents          portable pure-pi extension: Agent + get_subagent_
                     pi-delegation (bundled into every ThinkRail parent session by packages/server)
 packages/pi-thinkrail-workflow pi extension: the workflow skill system + its always-on routing rule
                     (bundled into every session; workspace-internal, not portable)
+packages/evals     eval/experiment framework: session→fixture record & replay, trial metric capture,
+                    experiment runner + CLI report (session factory injected; host/UI integration is a
+                    later phase — not on the wire today)
 ```
 
 Artifact verification is a separate source-only workspace, [[module-artifact-tests]]. It depends on
@@ -307,19 +310,6 @@ dependency. This keeps test process drivers outside both launchers and the serve
     imported as libraries. Active content (HTML, SVG, notebook outputs) renders only inside sandboxed,
     network-denying frames. Detail: [[submodule-web-resources]], [[submodule-web-panels]],
     [[submodule-server-reviews]].
-
-20. **Runtime application metrics are push-ingested and host-held.** The host's existing `Bun.serve`
-    accepts OTLP/HTTP **JSON** traces on a workspace-scoped ingest route
-    (`POST /ingest/otlp/:workspaceId/v1/traces`); ThinkRail is the receiver and never scrapes or
-    queries an external metrics backend. Spans reduce on arrival into bounded, in-memory,
-    per-workspace aggregates keyed by code location (`code.filepath` / `code.lineno` /
-    `code.function`), rolling-windowed, with no persistence across host restarts — the still-running
-    app re-fills them. The workspace-scoped path is attribution, never authentication: reachability
-    is the auth (decision #7). Consumers: an on-demand host-bound `metrics_query` pi tool (no
-    per-turn context injection), the Monaco desktop-file inline-metrics layer, and the chat-toolbar
-    ingest-liveness indicator whose popover doubles as the setup surface (the copy-paste ingest
-    URL). Deferred by decision: OTLP protobuf, metrics/logs signals, dashboards, persistence.
-    Detail: [[submodule-server-metrics]].
 
 ## Invariants
 

@@ -11,6 +11,7 @@ import {
 	type SessionStateRecord,
 	type SpecGraphNode,
 	type SubagentResourceSummary,
+	WALKTHROUGH_PROTOCOL_VERSION,
 	type WireModel,
 	type Workspace,
 } from "@thinkrail/contracts";
@@ -76,6 +77,10 @@ interface ProtocolState {
 
 export function selectCanRenameChat(state: ProtocolState): boolean {
 	return state.protocolVersion !== null && state.protocolVersion >= SESSION_RENAME_PROTOCOL_VERSION;
+}
+
+export function selectWalkthroughAvailable(state: ProtocolState): boolean {
+	return state.protocolVersion !== null && state.protocolVersion >= WALKTHROUGH_PROTOCOL_VERSION;
 }
 
 export function supportsChatResources(protocolVersion: number | null): boolean {

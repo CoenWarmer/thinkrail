@@ -65,6 +65,9 @@ export function completeOnce(req: OneShotRequest): Promise<OneShotResult> {
 			...(req.signal ? { signal: req.signal } : {}),
 		});
 
+		if (message.stopReason === "error") {
+			throw new Error(message.errorMessage ?? "one-shot completion failed");
+		}
 		const text = message.content
 			.filter((content) => content.type === "text")
 			.map((content) => content.text)

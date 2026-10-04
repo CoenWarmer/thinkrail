@@ -3,6 +3,7 @@ export { registerResourceRenderer, resolveRenderers } from "./registry";
 export { anchorLabel, isPlaceable } from "./review";
 export type {
 	AnchorDraft,
+	DiffWalkthrough,
 	HunkActions,
 	ResourceAnchorCapability,
 	ResourceContent,
@@ -15,4 +16,5 @@ export type {
 	ReviewThread,
 	ReviewThreadActions,
 	SurfaceReview,
+	WalkthroughCardStep,
 } from "./types";

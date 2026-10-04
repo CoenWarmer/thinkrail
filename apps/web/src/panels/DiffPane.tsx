@@ -17,6 +17,7 @@ import {
 import { IconTooltip } from "@/components/ui/tooltip";
 import { copyText, isPhoneViewport, usePhoneViewport } from "@/lib";
 import {
+	type DiffWalkthrough,
 	describeResource,
 	type HunkActions,
 	type ResourceContent,
@@ -29,7 +30,7 @@ import type { DiffTab } from "../store";
 import { selectDiffTabTargetRef, selectWorkspaceIsRunning, toast, useAppStore } from "../store";
 import { errorText, getTransport, wsErrorCode } from "../transport";
 import { canOfferChangeMutations, scopeHasMutableModifiedSide } from "./changeMutationAvailability";
-import { splitPath } from "./changesModel";
+import { scopeKey, splitPath } from "./changesModel";
 import {
 	PENDING_TEXT_META,
 	rendererImplementationKey,
@@ -44,6 +45,7 @@ import { ToggleSegment } from "./ToggleSegment";
 import { UnplacedReviewStrip } from "./UnplacedReviewStrip";
 import { useLiveTabContent } from "./useLiveTabContent";
 import { useFileReview } from "./useReviewCommenting";
+import { goToWalkthroughStep } from "./walkthrough";
 
 const loading = <LoadingRegion rows={12} className="h-full p-12" />;
 
@@ -115,6 +117,30 @@ export function DiffPane({ tab }: { tab: DiffTab }) {
 		mutationExpect !== null,
 	);
 	const review = useFileReview(tab.workspaceId, tab.path, "diff", tab.scope);
+	const workspaceWalkthrough = useAppStore(
+		(state) => state.walkthroughByWorkspace[tab.workspaceId],
+	);
+	const walkthrough = useMemo<DiffWalkthrough | undefined>(() => {
+		if (!workspaceWalkthrough || workspaceWalkthrough.scopeKey !== scopeKey(tab.scope))
+			return undefined;
+		const steps = workspaceWalkthrough.steps.flatMap((step, index) => {
+			if (step.path !== tab.path) return [];
+			const additions = step.modified.count > 0;
+			return [
+				{
+					index,
+					total: workspaceWalkthrough.steps.length,
+					title: step.title,
+					body: step.body,
+					side: (additions ? "additions" : "deletions") as "additions" | "deletions",
+					lineNumber: Math.max(0, (additions ? step.modified.start : step.original.start) - 1),
+					active: index === workspaceWalkthrough.activeIndex,
+				},
+			];
+		});
+		if (steps.length === 0) return undefined;
+		return { steps, onStep: (index) => goToWalkthroughStep(tab.workspaceId, index) };
+	}, [workspaceWalkthrough, tab.scope, tab.path, tab.workspaceId]);
 	const targetRef = useAppStore((state) => selectDiffTabTargetRef(state, tab));
 	const agentWorking = useAppStore((state) => selectWorkspaceIsRunning(state, tab.workspaceId));
 
@@ -441,6 +467,7 @@ export function DiffPane({ tab }: { tab: DiffTab }) {
 						ignoreWhitespace={ignoreWhitespace}
 						{...(reviewable ? { review } : {})}
 						{...(hunkActions ? { hunkActions } : {})}
+						{...(walkthrough ? { walkthrough } : {})}
 						onPlacedThreadIds={onPlacedThreadIds}
 						viewState={tab.viewState}
 						onViewState={saveViewState}

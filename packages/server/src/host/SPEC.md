@@ -407,6 +407,18 @@ channel fan-out, and the process-boot wrapper both launchers share.
   `ensureWorkspaceScratchDir` before creating the session — the Default workspace's gitignored
   `.thinkrail/context/` lands in the user's repo only when a chat actually starts there (and a
   worktree's deleted scratch dir self-heals). Host-composed — no new module edges.
+- **Guided walkthrough composition** (`host/walkthrough.ts`, the `walkthrough.generate` handler, v76): the
+  host builds the scope's hunk inventory itself — `git.status` for the file list (optionally filtered to the
+  caller's `paths`), per-file `gitDiffFile` text sides only, zero-context `structuredPatch` hunks, capped at
+  80 hunks / 1600 chars each, dropping insignificant hunks (pure import/re-export churn plus blank lines,
+  `isInsignificantHunk`) unless the whole inventory would be empty, in which case the churn-only inventory
+  stands — assembles best-effort session context from the named chat's recent
+  non-control user messages (`getSessionMessages`; absent or failing context never blocks), and delegates
+  ordering/explanation to `assist.suggestWalkthrough` (see [[submodule-server-assist]]). Pure
+  `assembleSteps` maps drafts to anchored `WalkthroughStep`s — model order first, every skipped hunk
+  appended in file order with a fallback title — so the result always covers the whole (capped) inventory.
+  A null assist result surfaces as a thrown, toastable error; the walkthrough itself is client-ephemeral
+  and never host-persisted.
 - **Project lifecycle fan-out:** `createServer` installs the `projects` module's publisher and maps every
   authoritative open/reopen/close snapshot to **`project.updated`**. The WS `open` handler subscribes to
   that channel and hydrates two views in `server.welcome`: `projects` (open records only) and

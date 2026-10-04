@@ -296,6 +296,7 @@ export const WS_METHODS = {
 	evalSaveExperiment: "eval.saveExperiment",
 	evalRun: "eval.run",
 	evalStop: "eval.stop",
+	evalTrialMessages: "eval.trialMessages",
 	templateList: "template.list",
 	templateGet: "template.get",
 	templateSave: "template.save",
@@ -804,6 +805,10 @@ export interface WsMethodMap {
 	"eval.stop": {
 		params: { experimentId: string };
 		result: { stopping: boolean };
+	};
+	"eval.trialMessages": {
+		params: { experimentId: string; conditionId: string; trial: number; sessionId: string };
+		result: { messages: TranscriptMessage[] };
 	};
 	"template.list": {
 		params: TemplateReadLocation;

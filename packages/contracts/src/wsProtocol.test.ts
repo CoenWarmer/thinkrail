@@ -147,6 +147,7 @@ test("the eval lifecycle ships its surface at v77", () => {
 	expect(WS_METHODS.evalSaveExperiment).toBe("eval.saveExperiment");
 	expect(WS_METHODS.evalRun).toBe("eval.run");
 	expect(WS_METHODS.evalStop).toBe("eval.stop");
+	expect(WS_METHODS.evalTrialMessages).toBe("eval.trialMessages");
 	expect(WS_CHANNELS.evalUpdate).toBe("eval.update");
 });
 

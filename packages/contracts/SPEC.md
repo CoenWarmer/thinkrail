@@ -646,8 +646,10 @@ error when the session predates baseline capture), **`eval.saveExperiment`**, **
 `EvalConfirmedBudget` must restate the stored experiment's budget verbatim (the explicit
 spend-confirmation contract; the host rejects mismatches) — and **`eval.stop`**. Push:
 **`eval.update`** (`EvalUpdatePush`: current run state + optionally the just-appended trial record).
-Live trial transcripts deliberately ride the existing `pi.event` stream and `session.getMessages`
-keyed by the trial's session id — no second transcript channel. `EvalCondition` carries **only the
+Live trial transcripts ride **`eval.trialMessages`** (`{experimentId, conditionId, trial,
+sessionId}` → `TranscriptMessage[]`) — `session.getMessages` requires a real workspace, and trial
+sessions live on synthetic ids; there is still no second *streaming* channel: the client re-reads
+on `eval.update` frames while a trial is live. `EvalCondition` carries **only the
 treatments the host binding supports** (model, thinking level); widening it is the designated path
 for new treatments, so an unsupported knob is unrepresentable rather than silently ignored.
 

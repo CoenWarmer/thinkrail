@@ -18,6 +18,14 @@ export function recordsPath(): string {
 	return join(evalsRoot(), "trials.jsonl");
 }
 
+export function trialWorkspacePath(
+	experimentId: string,
+	conditionId: string,
+	trial: number,
+): string {
+	return join(evalsRoot(), "work", `${experimentId}-${conditionId}-${trial}`);
+}
+
 function experimentsDir(): string {
 	return join(evalsRoot(), "experiments");
 }

@@ -2,10 +2,12 @@ import type {
 	EvalBudget,
 	EvalCondition,
 	EvalExperiment,
+	EvalTrialRecord,
 	SessionSummary,
+	TranscriptMessage,
 } from "@thinkrail/contracts";
 import { EVALS_PROTOCOL_VERSION } from "@thinkrail/contracts";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -14,6 +16,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Markdown } from "../chat/Markdown";
 import { selectEvalConditionAggregates, selectWorkspaceById, useAppStore } from "../store";
 import { getTransport } from "../transport";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -293,6 +296,10 @@ function ExperimentRow({
 	const aggregates = useAppStore((s) => selectEvalConditionAggregates(s, experiment.id));
 	const setEvalTrials = useAppStore((s) => s.setEvalTrials);
 
+	const trials = useAppStore((s) => s.evalTrialsByExperiment[experiment.id]);
+	const [inspecting, setInspecting] = useState<EvalTrialRecord | null>(null);
+	const [comparing, setComparing] = useState(false);
+
 	const toggle = async () => {
 		const next = !expanded;
 		setExpanded(next);
@@ -349,6 +356,18 @@ function ExperimentRow({
 			</div>
 			{expanded ? (
 				<div className="pt-8 tr-text-metadata">
+					{aggregates.length > 1 ? (
+						<div className="pb-4">
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setComparing(true)}
+								data-testid={`eval-compare-${experiment.id}`}
+							>
+								Compare conditions…
+							</Button>
+						</div>
+					) : null}
 					{aggregates.length === 0 ? (
 						<div className="text-text-muted">No trials recorded yet.</div>
 					) : (
@@ -375,7 +394,40 @@ function ExperimentRow({
 							</tbody>
 						</table>
 					)}
+					{(trials ?? []).length > 0 ? (
+						<ul className="flex flex-col pt-4">
+							{(trials ?? []).map((trial) => (
+								<li key={`${trial.conditionId}-${trial.trial}`}>
+									<button
+										type="button"
+										className="w-full py-2 text-left text-text-muted hover:text-text-default"
+										onClick={() => setInspecting(trial)}
+										data-testid={`eval-trial-${trial.conditionId}-${trial.trial}`}
+									>
+										{trial.conditionId}#{trial.trial} — {trial.status}
+										{trial.verdict.pass ? "" : " (failed)"}
+									</button>
+								</li>
+							))}
+						</ul>
+					) : null}
 				</div>
+			) : null}
+			{inspecting ? (
+				<TrialTranscriptDialog
+					experimentId={experiment.id}
+					trial={inspecting}
+					onClose={() => setInspecting(null)}
+					onError={onError}
+				/>
+			) : null}
+			{comparing ? (
+				<CompareDialog
+					experimentId={experiment.id}
+					trials={trials ?? []}
+					onClose={() => setComparing(false)}
+					onError={onError}
+				/>
 			) : null}
 			<ConfirmDialog
 				open={confirmOpen}
@@ -524,6 +576,205 @@ function ExperimentComposer({
 						Save experiment
 					</Button>
 				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+function TrialTranscript({
+	experimentId,
+	trial,
+	onError,
+}: {
+	experimentId: string;
+	trial: EvalTrialRecord;
+	onError: (err: unknown) => void;
+}) {
+	const [messages, setMessages] = useState<TranscriptMessage[] | null>(null);
+	const live = useAppStore(
+		(s) => s.evalRun?.activeTrial?.sessionId === trial.sessionId && trial.sessionId !== "",
+	);
+	const liveTick = useAppStore((s) =>
+		live ? (s.evalRun?.activeTrial?.costUsd ?? 0) + (s.evalRun?.completedTrials ?? 0) : 0,
+	);
+
+	useEffect(() => {
+		let cancelled = false;
+		getTransport()
+			.request("eval.trialMessages", {
+				experimentId,
+				conditionId: trial.conditionId,
+				trial: trial.trial,
+				sessionId: trial.sessionId,
+			})
+			.then((result) => {
+				if (!cancelled) setMessages(result.messages);
+			})
+			.catch((err) => {
+				if (!cancelled) onError(err);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [experimentId, trial.conditionId, trial.trial, trial.sessionId, onError, liveTick]);
+
+	if (messages === null)
+		return <div className="tr-text-metadata text-text-muted">Loading transcript…</div>;
+	return (
+		<div className="flex flex-col gap-8">
+			{live ? <div className="tr-text-metadata text-text-muted">live — updating…</div> : null}
+			{messages.map((message, index) => (
+				<TranscriptBlock key={`${index}-${message.role}`} message={message} />
+			))}
+		</div>
+	);
+}
+
+function TranscriptBlock({ message }: { message: TranscriptMessage }) {
+	if (message.role === "user" || message.role === "assistant") {
+		const text = transcriptText(message.content);
+		const tools =
+			message.role === "assistant" && Array.isArray(message.content)
+				? message.content.filter(
+						(block: { type?: string }) => (block as { type?: string }).type === "toolCall",
+					)
+				: [];
+		if (!text.trim() && tools.length === 0) return null;
+		return (
+			<div className="tr-text-metadata">
+				<div className="tr-text-eyebrow text-text-muted">{message.role}</div>
+				{text.trim() ? <Markdown text={text} /> : null}
+				{tools.map((tool, i) => (
+					<div key={`${i}-${(tool as { name?: string }).name}`} className="text-text-muted">
+						→ {(tool as { name?: string }).name}
+					</div>
+				))}
+			</div>
+		);
+	}
+	return null;
+}
+
+function transcriptText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content
+		.filter((block: { type?: string }) => block.type === "text")
+		.map((block: { text?: string }) => block.text ?? "")
+		.join("\n");
+}
+
+function TrialTranscriptDialog({
+	experimentId,
+	trial,
+	onClose,
+	onError,
+}: {
+	experimentId: string;
+	trial: EvalTrialRecord;
+	onClose: () => void;
+	onError: (err: unknown) => void;
+}) {
+	return (
+		<Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+			<DialogContent className="max-w-[40rem]">
+				<DialogHeader>
+					<DialogTitle>
+						{trial.conditionId}#{trial.trial} — {trial.status}
+						{trial.event?.costUsd != null ? ` — $${trial.event.costUsd.toFixed(4)}` : ""}
+					</DialogTitle>
+				</DialogHeader>
+				<div className="max-h-[60vh] overflow-y-auto">
+					<TrialTranscript experimentId={experimentId} trial={trial} onError={onError} />
+				</div>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+function CompareDialog({
+	experimentId,
+	trials,
+	onClose,
+	onError,
+}: {
+	experimentId: string;
+	trials: EvalTrialRecord[];
+	onClose: () => void;
+	onError: (err: unknown) => void;
+}) {
+	const aggregates = useAppStore((s) => selectEvalConditionAggregates(s, experimentId));
+	const conditionIds = aggregates.map((a) => a.conditionId);
+	const [left, setLeft] = useState(conditionIds[0] ?? "");
+	const [right, setRight] = useState(conditionIds[1] ?? "");
+
+	const side = (conditionId: string) => {
+		const aggregate = aggregates.find((a) => a.conditionId === conditionId);
+		const latest = [...trials].reverse().find((t) => t.conditionId === conditionId);
+		return { aggregate, latest };
+	};
+	const l = side(left);
+	const r = side(right);
+	const delta =
+		l.aggregate?.avgCostUsd != null && r.aggregate?.avgCostUsd != null
+			? r.aggregate.avgCostUsd - l.aggregate.avgCostUsd
+			: null;
+
+	return (
+		<Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+			<DialogContent className="max-w-[56rem]">
+				<DialogHeader>
+					<DialogTitle>Compare conditions</DialogTitle>
+				</DialogHeader>
+				{delta !== null ? (
+					<div className="tr-text-metadata text-text-muted">
+						avg cost delta ({right} vs {left}): {delta >= 0 ? "+" : "−"}$
+						{Math.abs(delta).toFixed(4)}
+					</div>
+				) : null}
+				<div className="grid grid-cols-2 gap-12">
+					{[
+						{ id: left, set: setLeft, data: l },
+						{ id: right, set: setRight, data: r },
+					].map((column, index) => (
+						<div key={index === 0 ? "left" : "right"} className="min-w-0">
+							<select
+								className={FIELD}
+								value={column.id}
+								onChange={(e) => column.set(e.target.value)}
+							>
+								{conditionIds.map((id) => (
+									<option key={id} value={id}>
+										{id}
+									</option>
+								))}
+							</select>
+							{column.data.aggregate ? (
+								<div className="py-4 tr-text-metadata text-text-muted">
+									{column.data.aggregate.trials} trials ·{" "}
+									{column.data.aggregate.passRate === null
+										? "—"
+										: `${Math.round(column.data.aggregate.passRate * 100)}% pass`}{" "}
+									·{" "}
+									{column.data.aggregate.avgCostUsd === null
+										? "—"
+										: `$${column.data.aggregate.avgCostUsd.toFixed(4)} avg`}
+								</div>
+							) : null}
+							<div className="max-h-[45vh] overflow-y-auto">
+								{column.data.latest ? (
+									<TrialTranscript
+										experimentId={experimentId}
+										trial={column.data.latest}
+										onError={onError}
+									/>
+								) : (
+									<div className="tr-text-metadata text-text-muted">No trials.</div>
+								)}
+							</div>
+						</div>
+					))}
+				</div>
 			</DialogContent>
 		</Dialog>
 	);

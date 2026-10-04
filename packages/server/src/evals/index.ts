@@ -5,4 +5,5 @@ export {
 	listTrials,
 	promoteSession,
 	saveExperiment,
+	trialWorkspacePath,
 } from "./evalsStore";

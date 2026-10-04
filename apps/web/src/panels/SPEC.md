@@ -1216,7 +1216,13 @@ own section. The kebab menu (`plan-menu`, a
   `useProjectEvals` — same `useWorkspaceRead` discipline as specs but the snapshot lands
   project-keyed (`evalsByProject`). A pre-v77 host renders a plain "not supported" body (layout
   tools are static, so gating is the panel body's job). Errors surface as toasts; the panel holds
-  no transient run state of its own (the `eval.update` fold owns it).
+  no transient run state of its own (the `eval.update` fold owns it). **Trial inspection** opens a
+  trial as a props-driven transcript dialog over `eval.trialMessages` (user/assistant markdown via
+  the chat `Markdown` primitive + compact tool-call lines — deliberately below full chat tool-card
+  fidelity; `ChatView` stays the only store/transport chat integration per the chat SPEC). While
+  the trial is the live one, every `eval.update` fold re-fetches the transcript — live watching is
+  push-driven re-reading, not a second stream. **Compare** renders two conditions side by side:
+  per-condition aggregates, the avg-cost delta, and each side's latest trial transcript.
 - `SpecsPanel` is the read-only spec-graph viewer — a pure reader of that snapshot. One fetch per
   workspace activation, refetched automatically on the fs tick, rendered as the **`parent` tree** (roots =
   no/dangling parent; default-expanded). There is **no persistent Refresh control or panel toolbar row**:

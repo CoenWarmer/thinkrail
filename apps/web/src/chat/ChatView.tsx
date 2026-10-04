@@ -27,6 +27,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useNow } from "@/components/useNow";
 import { cn } from "@/lib";
 import { type ParsedTemplate, templateToSlashCommand, useTemplateCommandPicker } from "@/prompt";
 import {
@@ -60,6 +61,7 @@ import type { ChatMessageOrder } from "./chatPreferences";
 import { ExtUiDialog } from "./ExtUiDialog";
 import { FoldGeometryProvider } from "./foldState";
 import { HistoryOverlay } from "./HistoryOverlay";
+import { MetricsIndicator } from "./MetricsIndicator";
 import { deriveMessageActions } from "./messageActions";
 import {
 	compactSubmissionError,
@@ -79,6 +81,7 @@ import { TemplateEditorDialog } from "./TemplateEditorDialog";
 import { useChatResources, useCommandLog } from "./useChatResources";
 import { useModelCatalog } from "./useModelCatalog";
 import { useSessionStats } from "./useSessionStats";
+import { useWorkspaceMetrics } from "./useWorkspaceMetrics";
 import "./tools/register";
 import { ChatTurnView } from "./turns";
 import type { ChatAttachment, ChatTurn } from "./types";
@@ -238,6 +241,11 @@ export default function ChatView({
 	);
 	const [skillsOpen, setSkillsOpen] = useState(false);
 	const skillsStale = useAppStore((s) => selectSkillsStale(s, workspaceId, sessionId));
+	const metricsSummary = useWorkspaceMetrics(workspaceId);
+	const metricsNow = useNow();
+	const metricsIngestUrl = metricsSummary
+		? `${getTransport().httpBase()}${metricsSummary.ingestPath}`
+		: null;
 	const workspaceRoot = useAppStore(
 		(s) => selectWorkspaceById(s, workspaceId)?.worktreePath ?? undefined,
 	);
@@ -1024,6 +1032,13 @@ export default function ChatView({
 										) : null
 									}
 									stats={stats}
+									metrics={
+										<MetricsIndicator
+											summary={metricsSummary}
+											now={metricsNow}
+											ingestUrl={metricsIngestUrl}
+										/>
+									}
 									statusEntries={Object.entries(extUiStatus)}
 									left={
 										plan.data ? (

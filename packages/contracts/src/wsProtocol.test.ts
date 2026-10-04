@@ -11,6 +11,7 @@ import {
 	isBackgroundCommandCompletionMessage,
 	isTodoReviewFixMessage,
 	JBCENTRAL_QUOTA_PROTOCOL_VERSION,
+	METRICS_PROTOCOL_VERSION,
 	normalizeSessionTitle,
 	PLAN_REVIEW_SUBAGENT_PROTOCOL_VERSION,
 	PLAN_SUMMARY_GENERATION_PROTOCOL_VERSION,
@@ -148,6 +149,14 @@ test("resource metadata rides the two content reads from v75", () => {
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(RESOURCE_META_PROTOCOL_VERSION);
 	expect(WS_METHODS.fsReadFile).toBe("fs.readFile");
 	expect(WS_METHODS.gitDiffFile).toBe("git.diffFile");
+});
+
+test("runtime metrics introduce their reads and push at v76", () => {
+	expect(METRICS_PROTOCOL_VERSION).toBe(76);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(METRICS_PROTOCOL_VERSION);
+	expect(WS_METHODS.metricsSummary).toBe("metrics.summary");
+	expect(WS_METHODS.metricsForFile).toBe("metrics.forFile");
+	expect(WS_CHANNELS.metricsUpdated).toBe("metrics.updated");
 });
 
 describe("isTodoReviewFixMessage", () => {

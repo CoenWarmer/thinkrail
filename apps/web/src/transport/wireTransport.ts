@@ -4,6 +4,7 @@ import type {
 	ExtUiRequest,
 	HostUpdateNotice,
 	LoginPush,
+	MetricsUpdatedPayload,
 	Project,
 	ReviewChangedPayload,
 	ServerWelcome,
@@ -281,6 +282,10 @@ export function initTransport(): WsTransport {
 	transport.subscribe(WS_CHANNELS.reviewChanged, (data) => {
 		const payload = data as ReviewChangedPayload;
 		useAppStore.getState().applyReviewChanged(payload);
+	});
+
+	transport.subscribe(WS_CHANNELS.metricsUpdated, (data) => {
+		useAppStore.getState().noteMetricsUpdated(data as MetricsUpdatedPayload);
 	});
 
 	transport.subscribe(WS_CHANNELS.workspaceFsChanged, (data) => {

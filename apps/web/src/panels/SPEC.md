@@ -1617,6 +1617,18 @@ own section. The kebab menu (`plan-menu`, a
   messaging and Unicode highlighting); keeping word highlighting preserves F7. The TS/JS/JSON/CSS/HTML
   language-service contributions and their workers are absent, so this viewer emits no language-service
   diagnostics by construction.
+- **Runtime metrics annotate the desktop file editor, desktop-only.** `MonacoEditor` carries the
+  inline-metrics layer from [[submodule-server-metrics]]: `useFileMetrics(workspaceId, path)` reads
+  `metrics.forFile` on mount and refetches on the store's `metricsByWorkspace` tick (the folded,
+  host-throttled `metrics.updated` push — hydrate-then-stream), and the pure
+  `metricsDecorations.ts` builder turns annotations into one decoration per in-buffer line: an
+  end-of-line injected `after` hint (`· 1.2k calls · p95 48 ms · 3 err`, `.metrics-inline-hint`) plus a
+  gutter heat tint (`.metrics-heat-warm|hot` on the feedback ramp) relative to the file's own hottest
+  location (p95 × calls). Line anchors are version-true to the running build, not edit-true — shifted
+  lines until the app restarts are accepted v1 behavior. `FilePane`'s toolbar shows a **Metrics**
+  `ToggleSegment` (desktop `thinkrail/code` renderer only, and only once the workspace has ever
+  received a batch) that flips the store's frontend-local `metricsLayerVisible`; phone code surfaces
+  (Pierre) have no metrics UI in v1.
 - **Code surfaces re-theme from generic tokens, resiliently.** `MonacoEditor` has the sole `EDITOR_THEME`.
   Themes own one TextMate scope definition: chat uses its live CSS-variable form, while Monaco resolves that
   same definition plus its complete editor/widget/menu/input colour map to hex, loads it into a dedicated

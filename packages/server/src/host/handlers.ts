@@ -107,6 +107,7 @@ import {
 import { githubAuthStatus, githubRefresh } from "../github";
 import { clampLimit, getHistoryIndex } from "../history";
 import { logger } from "../log";
+import { fileAnnotations, metricsSummary } from "../metrics";
 import { openPr, previewPr } from "../pr";
 import {
 	acknowledgeProjectSkills,
@@ -516,6 +517,16 @@ const handlers: Record<string, Handler> = {
 		const p = params as { workspaceId: string; path: string };
 		void ensureWatch(p.workspaceId);
 		return readFile(p.workspaceId, p.path);
+	},
+	"metrics.summary": (params) => {
+		const p = params as { workspaceId: string };
+		getWorkspace(p.workspaceId);
+		return metricsSummary(p.workspaceId);
+	},
+	"metrics.forFile": (params) => {
+		const p = params as { workspaceId: string; path: string };
+		getWorkspace(p.workspaceId);
+		return { annotations: fileAnnotations(p.workspaceId, p.path) };
 	},
 	"spec.graph": (params) => {
 		const p = params as { workspaceId: string };

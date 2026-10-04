@@ -453,7 +453,14 @@ selected-log state belong to chat integration, not domain persistence. See
   **`noteFsChanged(payload)`** (folds a `workspace.fsChanged` push: `tick` increments per frame;
   `paths`/`truncated` are the last batch) — panels select their workspace's entry and refetch on `tick`
   change (the store holds only the signal, never fetches; `applyWorkspaceRemoved` drops a removed
-  workspace's entry). The **review slice** — **`reviewsByWorkspace: Record<workspaceId,
+  workspace's entry). The **runtime-metrics slice** —
+  **`metricsByWorkspace: Record<workspaceId, { tick, paths, summary }>`** with
+  **`noteMetricsUpdated(payload)`** (folds a `metrics.updated` push: `tick` increments, `paths` is the
+  last batch's changed set, the held `summary` survives) and **`setMetricsSummary(workspaceId, summary)`**
+  (a `metrics.summary` read landing) — same shape and refetch-on-tick contract as `fsChangesByWorkspace`;
+  the store holds only the signal + last summary, never fetches, and `applyWorkspaceRemoved` drops the
+  entry; **`metricsLayerVisible`** (+ `setMetricsLayerVisible`) is the frontend-local Monaco
+  metrics-layer toggle — client view state, never `AppConfig`. The **review slice** — **`reviewsByWorkspace: Record<workspaceId,
 ReviewSnapshot>`** with **`setWorkspaceReview`** (a `review.get` read landing) and
 **`applyReviewChanged`** (folds a `review.changed` push — full snapshot, idempotent; every client,
 including a mutation's initiator, converges here — no optimism); `applyWorkspaceRemoved` drops the

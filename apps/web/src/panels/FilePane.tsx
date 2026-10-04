@@ -124,9 +124,16 @@ export function FilePane({ tab }: { tab: FileTab }) {
 	const placedThreadIds =
 		placement?.implementationKey === implementationKey ? placement.ids : undefined;
 	useResetViewStateOnImplementationChange(tab.workspaceId, tab.id, implementationKey);
+	const workspaceHasMetrics = useAppStore((state) => {
+		const entry = state.metricsByWorkspace[tab.workspaceId];
+		return (entry?.summary?.lastReceivedAt ?? null) !== null || (entry?.tick ?? 0) > 0;
+	});
+	const metricsLayerVisible = useAppStore((state) => state.metricsLayerVisible);
+	const showMetricsToggle = workspaceHasMetrics && !mobile && renderer.id === "thinkrail/code";
 	const content = contentFor(tab);
 	const reviews = [review.worktree];
-	const showToolbar = candidates.length >= 2 || fileHasDraft;
+	const showToolbar = candidates.length >= 2 || fileHasDraft || showMetricsToggle;
+
 	const saveViewState = (state: unknown) => {
 		const current = useAppStore
 			.getState()
@@ -150,6 +157,14 @@ export function FilePane({ tab }: { tab: FileTab }) {
 					className="flex h-32 shrink-0 items-center justify-end gap-4 border-border-default border-b bg-container-header-bg px-12"
 				>
 					<SendReviewButton workspaceId={tab.workspaceId} path={tab.path} />
+					{showMetricsToggle ? (
+						<ToggleSegment
+							testid="metrics-layer-toggle"
+							label="Metrics"
+							active={metricsLayerVisible}
+							onClick={() => useAppStore.getState().setMetricsLayerVisible(!metricsLayerVisible)}
+						/>
+					) : null}
 					{candidates.length >= 2
 						? candidates.map((candidate) => (
 								<ToggleSegment

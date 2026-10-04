@@ -23,6 +23,8 @@ import type {
 	JbcentralLoginResult,
 	JbcentralQuotaSnapshot,
 	LoginReply,
+	MetricsFileAnnotation,
+	MetricsSummary,
 	OpenBranchReview,
 	OpenPrResult,
 	PrDraft,
@@ -105,6 +107,7 @@ export type TemplateReadLocation =
 
 export const PROTOCOL_VERSION = 76;
 export const WALKTHROUGH_PROTOCOL_VERSION = 76;
+export const METRICS_PROTOCOL_VERSION = 76;
 export const CHANGE_MUTATIONS_PROTOCOL_VERSION = 75;
 export const RESOURCE_META_PROTOCOL_VERSION = 75;
 export const REVIEW_RICH_ANCHORS_PROTOCOL_VERSION = 74;
@@ -284,6 +287,8 @@ export const WS_METHODS = {
 	reviewSendComment: "review.sendComment",
 	reviewSendBatch: "review.sendBatch",
 	reviewClose: "review.close",
+	metricsSummary: "metrics.summary",
+	metricsForFile: "metrics.forFile",
 	templateList: "template.list",
 	templateGet: "template.get",
 	templateSave: "template.save",
@@ -314,6 +319,7 @@ export const WS_CHANNELS = {
 	feedbackInterview: "feedback.interview",
 	reviewChanged: "review.changed",
 	reviewFailed: "review.failed",
+	metricsUpdated: "metrics.updated",
 } as const;
 
 export type WsMethod = (typeof WS_METHODS)[keyof typeof WS_METHODS];
@@ -788,6 +794,11 @@ export interface WsMethodMap {
 	"template.delete": {
 		params: { workspaceId?: string; scope: TemplateScope; name: string };
 		result: Ack;
+	};
+	"metrics.summary": { params: { workspaceId: string }; result: MetricsSummary };
+	"metrics.forFile": {
+		params: { workspaceId: string; path: string };
+		result: { annotations: MetricsFileAnnotation[] };
 	};
 }
 

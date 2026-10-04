@@ -167,6 +167,8 @@ beforeEach(() => {
 		closedChatsByWorkspace: {},
 		deletedSessionsByWorkspace: {},
 		fsChangesByWorkspace: {},
+		metricsByWorkspace: {},
+		metricsLayerVisible: true,
 		skillChangeTickByWorkspace: {},
 		skillsSyncedTickBySession: {},
 		projects: [],
@@ -4613,4 +4615,28 @@ test("authority can be given up without replacing the list (a consumer activatin
 	s().dropModelsFreshness();
 	expect(s().modelsFresh).toBe(false);
 	expect(s().models).toBe(refreshed);
+});
+
+test("metrics slice: pushes bump the tick, summary reads land, removal drops the entry", () => {
+	const s = () => useAppStore.getState();
+	s().noteMetricsUpdated({ workspaceId: "ws-m", paths: ["src/a.ts"] });
+	expect(s().metricsByWorkspace["ws-m"]).toEqual({ tick: 1, paths: ["src/a.ts"], summary: null });
+
+	const summary = {
+		lastReceivedAt: 123,
+		services: ["svc"],
+		totalSpans: 1,
+		locationCount: 1,
+		ingestPath: "/ingest/otlp/ws-m/v1/traces",
+		topLocations: [],
+	};
+	s().setMetricsSummary("ws-m", summary);
+	expect(s().metricsByWorkspace["ws-m"]?.summary).toEqual(summary);
+	s().noteMetricsUpdated({ workspaceId: "ws-m", paths: [] });
+	expect(s().metricsByWorkspace["ws-m"]?.tick).toBe(2);
+	expect(s().metricsByWorkspace["ws-m"]?.summary).toEqual(summary);
+
+	useAppStore.setState({ removedWorkspaceIds: { "ws-m": true } });
+	s().noteMetricsUpdated({ workspaceId: "ws-m", paths: [] });
+	expect(s().metricsByWorkspace["ws-m"]?.tick).toBe(2);
 });

@@ -48,6 +48,9 @@ packages/pi-subagents          portable pure-pi extension: Agent + get_subagent_
                     pi-delegation (bundled into every ThinkRail parent session by packages/server)
 packages/pi-thinkrail-workflow pi extension: the workflow skill system + its always-on routing rule
                     (bundled into every session; workspace-internal, not portable)
+packages/evals     eval/experiment framework: session→fixture record & replay, trial metric capture,
+                    experiment runner + CLI report (session factory injected; host/UI integration is a
+                    later phase — not on the wire today)
 ```
 
 Artifact verification is a separate source-only workspace, [[module-artifact-tests]]. It depends on
@@ -307,6 +310,28 @@ dependency. This keeps test process drivers outside both launchers and the serve
     imported as libraries. Active content (HTML, SVG, notebook outputs) renders only inside sandboxed,
     network-denying frames. Detail: [[submodule-web-resources]], [[submodule-web-panels]],
     [[submodule-server-reviews]].
+
+20. **Evals are controlled experiments over recorded sessions.** [[module-evals]]
+    (`packages/evals`) owns measuring ThinkRail's quality and cost on coding tasks. The experimental
+    unit is **trial = one fresh isolated session × one fixed fixture × one condition** — variables
+    vary between sessions, never within one. Treatments (model, specs availability, skill set,
+    prompt variant) are explicit config, distinct from outcome metrics; repetition (N trials per
+    condition) and budget tripwires are first-class because single agent runs are noise. Metrics
+    come from a **passive subscriber to pi's event stream plus artifact detectors over the resulting
+    workspace** — never recomputing what pi reports; binding pass/fail verdicts are deterministic
+    and an LLM judge is advisory only (an LLM never decides *pass*, the same invariant the workflow
+    test harness holds). Realism comes from **record & replay**: any session is retroactively
+    promotable to a fixture — transcript from pi's persisted `session.jsonl`, start-state workspace
+    reconstructed from a cheap **baseline marker captured at every session start** (HEAD ref + dirty
+    diff; workspaces are git worktrees). A fixture's user side, start workspace, and session config
+    are replayed; the agent's recorded side is reference-only (replaying it would make conditions
+    indistinguishable). **Rejected: live shadow sessions** — variants running beside a real user
+    session diverge after one turn, carry unsandboxed bash side effects, and multiply token spend
+    silently. The package receives its session factory **by injection**, so the planned phase-2 host
+    integration (typed `experiment.*` contracts + web panels for fixture promotion, a
+    baseline-anchored experiment composer, trial inspection, and side-by-side condition compare)
+    adds no package cycle. Experiments spend real provider tokens: on demand only, never a
+    commit/CI gate; fixtures and records stay local under `~/.thinkrail`. Detail: [[module-evals]].
 
 ## Invariants
 

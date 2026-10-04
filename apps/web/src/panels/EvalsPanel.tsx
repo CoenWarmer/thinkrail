@@ -410,10 +410,17 @@ function ExperimentComposer({
 	const [maxTurns, setMaxTurns] = useState("20");
 	const [maxCostUsd, setMaxCostUsd] = useState("1");
 	const [variantModel, setVariantModel] = useState("");
+	const [variantThinking, setVariantThinking] = useState("");
 
 	const save = async () => {
 		const conditions: EvalCondition[] = [{ id: "baseline" }];
-		if (variantModel.trim()) conditions.push({ id: "variant", model: variantModel.trim() });
+		if (variantModel.trim() || variantThinking) {
+			conditions.push({
+				id: "variant",
+				...(variantModel.trim() ? { model: variantModel.trim() } : {}),
+				...(variantThinking ? { thinkingLevel: variantThinking } : {}),
+			});
+		}
 		const experiment: EvalExperiment = {
 			id: id.trim(),
 			fixtureId: fixtureId || fixtures[0] || "",
@@ -485,13 +492,28 @@ function ExperimentComposer({
 						</label>
 					</div>
 					<label className="flex flex-col gap-2">
-						Variant model (provider/id — empty for baseline-only)
+						Variant model (provider/id — empty to keep the baseline model)
 						<input
 							className={FIELD}
 							value={variantModel}
 							onChange={(e) => setVariantModel(e.target.value)}
 							placeholder="openrouter/moonshotai/kimi-k2.6"
 						/>
+					</label>
+					<label className="flex flex-col gap-2">
+						Variant thinking level (empty to keep the baseline level)
+						<select
+							className={FIELD}
+							value={variantThinking}
+							onChange={(e) => setVariantThinking(e.target.value)}
+						>
+							<option value="">baseline</option>
+							{["off", "minimal", "low", "medium", "high", "xhigh", "max"].map((level) => (
+								<option key={level} value={level}>
+									{level}
+								</option>
+							))}
+						</select>
 					</label>
 				</div>
 				<DialogFooter>

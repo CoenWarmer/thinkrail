@@ -1,3 +1,4 @@
+import { EVALS_PROTOCOL_VERSION } from "@thinkrail/contracts";
 import { useState } from "react";
 import { selectWorkspaceById, useAppStore } from "../store";
 import { getTransport } from "../transport";
@@ -8,9 +9,12 @@ export function useProjectEvals(workspaceId: string | null): {
 	reload: () => void;
 } {
 	const [failedFor, setFailedFor] = useState<string | null>(null);
+	const supported = useAppStore(
+		(s) => s.protocolVersion !== null && s.protocolVersion >= EVALS_PROTOCOL_VERSION,
+	);
 
 	const { reload } = useWorkspaceRead(
-		workspaceId,
+		supported ? workspaceId : null,
 		async (id) => {
 			const transport = getTransport();
 			const [fixtures, experiments] = await Promise.all([

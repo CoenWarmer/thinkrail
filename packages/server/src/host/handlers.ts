@@ -1233,6 +1233,9 @@ const handlers: Record<string, Handler> = {
 			experimentId: string;
 			confirmedBudget: EvalConfirmedBudget;
 		};
+		const projectId = getWorkspace(p.workspaceId).projectId;
+		if (!listEvalExperiments(projectId).some((e) => e.id === p.experimentId))
+			throw new Error(`Experiment ${p.experimentId} does not belong to this project.`);
 		startEvalRun({
 			experimentId: p.experimentId,
 			confirmedBudget: p.confirmedBudget,

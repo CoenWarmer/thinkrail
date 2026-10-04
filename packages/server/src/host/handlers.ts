@@ -1,6 +1,8 @@
 import type {
 	AppConfigUpdate,
 	AskUserQuestionResult,
+	EvalConfirmedBudget,
+	EvalExperiment,
 	ExtUiResponse,
 	GitDiffScope,
 	HistoryScope,
@@ -94,6 +96,16 @@ import {
 } from "../changes";
 import { selectDirectory } from "../dialog";
 import { listAvailableEditors, openEditor, revealInFileManager } from "../editors";
+import {
+	currentRunState as currentEvalRunState,
+	listExperiments as listEvalExperiments,
+	listFixtures as listEvalFixtures,
+	listTrials as listEvalTrials,
+	promoteSession as promoteEvalSession,
+	saveExperiment as saveEvalExperiment,
+	startRun as startEvalRun,
+	stopRun as stopEvalRun,
+} from "../evals";
 import { recordAcceptedMessage, respondToInterview } from "../feedback";
 import { readDir, readFile } from "../fs";
 import {
@@ -189,6 +201,7 @@ import {
 } from "../workspaces";
 import { ackSend } from "./ackSend";
 import { sessionProviderAnalytics, trackChatStarted } from "./authAnalytics";
+import { assertRunnableCondition, trialSessionFactory } from "./evalsRunner";
 import { nudgeBaseRefWorkspaces } from "./fsNudge";
 import { buildHistoryScope } from "./historyScope";
 import { provisionInitialTerminal } from "./initialTerminal";
@@ -1179,6 +1192,57 @@ const handlers: Record<string, Handler> = {
 			if (sessions.length === 0) throw new Error("No draft comments to send.");
 			return { sessions };
 		});
+	},
+	"eval.fixtures": (params) => {
+		const p = params as { workspaceId: string };
+		return { fixtures: listEvalFixtures(getWorkspace(p.workspaceId).projectId) };
+	},
+	"eval.experiments": (params) => {
+		const p = params as { workspaceId: string };
+		return {
+			experiments: listEvalExperiments(getWorkspace(p.workspaceId).projectId),
+			run: currentEvalRunState(),
+		};
+	},
+	"eval.trials": (params) => {
+		const p = params as { experimentId: string };
+		return { trials: listEvalTrials(p.experimentId) };
+	},
+	"eval.promote": async (params) => {
+		const p = params as { workspaceId: string; sessionId: string; fixtureId?: string };
+		const ws = getWorkspace(p.workspaceId);
+		return {
+			fixture: await promoteEvalSession({
+				projectId: ws.projectId,
+				sessionId: p.sessionId,
+				cwd: ws.worktreePath,
+				...(p.fixtureId ? { fixtureId: p.fixtureId } : {}),
+			}),
+		};
+	},
+	"eval.saveExperiment": (params) => {
+		const p = params as { workspaceId: string; experiment: EvalExperiment };
+		for (const condition of p.experiment.conditions) assertRunnableCondition(condition);
+		return {
+			experiment: saveEvalExperiment(getWorkspace(p.workspaceId).projectId, p.experiment),
+		};
+	},
+	"eval.run": (params) => {
+		const p = params as {
+			workspaceId: string;
+			experimentId: string;
+			confirmedBudget: EvalConfirmedBudget;
+		};
+		startEvalRun({
+			experimentId: p.experimentId,
+			confirmedBudget: p.confirmedBudget,
+			factory: trialSessionFactory(p.experimentId),
+		});
+		return { started: true };
+	},
+	"eval.stop": (params) => {
+		const p = params as { experimentId: string };
+		return { stopping: stopEvalRun(p.experimentId) };
 	},
 	"template.list": (params) => ({
 		templates: listTemplates(resolveTemplateReadDirs(params as TemplateReadLocation)),

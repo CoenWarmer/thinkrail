@@ -634,6 +634,23 @@ of the host.
   confirming the confirmations. This behavior is protocol-versioned — a replaying UI must never run against a
   pre-dedup host.
 
+## Evals (v77)
+
+The `eval.*` surface (`EVALS_PROTOCOL_VERSION` 77) exposes the experiment lifecycle owned by
+architecture Decision #20. Shapes live in `evalProtocol.ts` and **mirror `@thinkrail/evals`' record
+schemas by shape** — contracts never imports that package; the server's evals module is where both
+sides meet. Reads: **`eval.fixtures`** / **`eval.experiments`** (experiments plus the single
+`EvalRunState | null` — one active run per host) / **`eval.trials`** (per-experiment
+`EvalTrialRecord[]`). Mutations: **`eval.promote`** (session → fixture; refused with an explanatory
+error when the session predates baseline capture), **`eval.saveExperiment`**, **`eval.run`** — whose
+`EvalConfirmedBudget` must restate the stored experiment's budget verbatim (the explicit
+spend-confirmation contract; the host rejects mismatches) — and **`eval.stop`**. Push:
+**`eval.update`** (`EvalUpdatePush`: current run state + optionally the just-appended trial record).
+Live trial transcripts deliberately ride the existing `pi.event` stream and `session.getMessages`
+keyed by the trial's session id — no second transcript channel. `EvalCondition` carries **only the
+treatments the host binding supports** (model, thinking level); widening it is the designated path
+for new treatments, so an unsupported knob is unrepresentable rather than silently ignored.
+
 ## Chat Resources
 
 The current-chat resource view is a projection of two existing capability owners, not a generic

@@ -7,6 +7,7 @@ import {
 	CHAT_RESOURCES_PROTOCOL_VERSION,
 	customMessageText,
 	DEFAULT_MODEL_PROTOCOL_VERSION,
+	EVALS_PROTOCOL_VERSION,
 	HOST_UPDATE_RUN_PROTOCOL_VERSION,
 	isBackgroundCommandCompletionMessage,
 	isTodoReviewFixMessage,
@@ -130,11 +131,23 @@ test("rich review anchors advance the additive selector union to v74", () => {
 });
 
 test("change mutations name their two methods at v75", () => {
-	expect(PROTOCOL_VERSION).toBe(75);
 	expect(CHANGE_MUTATIONS_PROTOCOL_VERSION).toBe(75);
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(CHANGE_MUTATIONS_PROTOCOL_VERSION);
 	expect(WS_METHODS.changeRevert).toBe("change.revert");
 	expect(WS_METHODS.changeUndo).toBe("change.undo");
+});
+
+test("the eval lifecycle ships its surface at v77", () => {
+	expect(EVALS_PROTOCOL_VERSION).toBe(77);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(EVALS_PROTOCOL_VERSION);
+	expect(WS_METHODS.evalFixtures).toBe("eval.fixtures");
+	expect(WS_METHODS.evalExperiments).toBe("eval.experiments");
+	expect(WS_METHODS.evalTrials).toBe("eval.trials");
+	expect(WS_METHODS.evalPromote).toBe("eval.promote");
+	expect(WS_METHODS.evalSaveExperiment).toBe("eval.saveExperiment");
+	expect(WS_METHODS.evalRun).toBe("eval.run");
+	expect(WS_METHODS.evalStop).toBe("eval.stop");
+	expect(WS_CHANNELS.evalUpdate).toBe("eval.update");
 });
 
 test("resource metadata rides the two content reads from v75", () => {

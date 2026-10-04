@@ -136,6 +136,7 @@ import {
 	sendableComments,
 	updateComment,
 } from "../reviews";
+import { captureSessionBaseline } from "../session-baseline";
 import { getConfig, updateConfig } from "../settings";
 import { evictSpecIndex, projectHasSpecs, specGraph } from "../spec";
 import {
@@ -360,6 +361,7 @@ async function sendToFileChat(
 		thinkingLevel: defaults.thinkingLevel,
 	});
 	trackChatStarted(created);
+	void captureSessionBaseline(created.sessionId, ws.worktreePath);
 	await markCommentsSent(workspaceId, ids, created.sessionId);
 	fireReviewPrompt(workspaceId, ids, created.sessionId, pkg);
 	return { ...created, reused: false };
@@ -789,6 +791,7 @@ const handlers: Record<string, Handler> = {
 			thinkingLevel: defaults.thinkingLevel,
 		});
 		trackChatStarted(created);
+		void captureSessionBaseline(created.sessionId, ws.worktreePath);
 		return created;
 	},
 	"session.prompt": (params, ctx) => {

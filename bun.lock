@@ -10,6 +10,7 @@
         "@playwright/test": "1.61.0",
         "@thinkrail/artifact-tests": "workspace:*",
         "@thinkrail/contracts": "workspace:*",
+        "@thinkrail/evals": "workspace:*",
         "@thinkrail/server": "workspace:*",
         "@thinkrail/shared": "workspace:*",
         "husky": "9.1.7",
@@ -159,6 +160,14 @@
       "devDependencies": {
         "@earendil-works/pi-agent-core": "catalog:",
         "@earendil-works/pi-ai": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/evals": {
+      "name": "@thinkrail/evals",
+      "version": "0.0.0",
+      "devDependencies": {
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
@@ -1026,6 +1035,8 @@
     "@thinkrail/contracts": ["@thinkrail/contracts@workspace:packages/contracts"],
 
     "@thinkrail/desktop": ["@thinkrail/desktop@workspace:apps/desktop"],
+
+    "@thinkrail/evals": ["@thinkrail/evals@workspace:packages/evals"],
 
     "@thinkrail/server": ["@thinkrail/server@workspace:packages/server"],
 

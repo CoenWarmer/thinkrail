@@ -341,6 +341,14 @@ export interface LineSpan {
 	count: number;
 }
 
+export interface WalkthroughStep {
+	path: string;
+	original: LineSpan;
+	modified: LineSpan;
+	title: string;
+	body: string;
+}
+
 export type RevertTarget =
 	| { kind: "file" }
 	| { kind: "range"; original: LineSpan; modified: LineSpan };

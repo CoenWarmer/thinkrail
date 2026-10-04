@@ -22,6 +22,7 @@ import type {
 import { ReviewComposer } from "../../ReviewComposer";
 import { ReviewThreadCard } from "../../ReviewThreadCard";
 import { useScrollViewState } from "../../useScrollViewState";
+import { WalkthroughCard } from "../../WalkthroughCard";
 import { type AnnotationSlot, reconcileAnnotationSlots } from "./annotationSlots";
 import { type ChangeBlock, changeBlockId, computeActionBlocks } from "./changeBlocks";
 import PierreProvider from "./PierreProvider";
@@ -39,7 +40,8 @@ import {
 type DiffAnnotationMetadata =
 	| { kind: "thread"; id: string }
 	| { kind: "composer"; id: number }
-	| { kind: "hunk"; id: string };
+	| { kind: "hunk"; id: string }
+	| { kind: "walkthrough"; index: number };
 
 const NO_PLACED_THREADS: ReadonlySet<string> = new Set();
 
@@ -173,6 +175,7 @@ function PierreDiffSurface({
 	ignoreWhitespace,
 	review,
 	hunkActions,
+	walkthrough,
 	onPlacedThreadIds,
 	viewState,
 	onViewState,
@@ -236,6 +239,19 @@ function PierreDiffSurface({
 	const hunkAnnotations = useMemo(
 		() => (hunkActions ? blocks.map(actionAnnotation) : []),
 		[blocks, hunkActions],
+	);
+	const walkthroughAnnotations = useMemo<DiffLineAnnotation<DiffAnnotationMetadata>[]>(
+		() =>
+			(walkthrough?.steps ?? []).map((step) => ({
+				side: step.side,
+				lineNumber: step.lineNumber,
+				metadata: { kind: "walkthrough", index: step.index },
+			})),
+		[walkthrough?.steps],
+	);
+	const walkthroughStepByIndex = useMemo(
+		() => new Map((walkthrough?.steps ?? []).map((step) => [step.index, step])),
+		[walkthrough?.steps],
 	);
 	const [composer, setComposer] = useState<OpenComposer | BlockedSelection | null>(null);
 	const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
@@ -308,8 +324,8 @@ function PierreDiffSurface({
 		[composer],
 	);
 	const annotations = useMemo<DiffLineAnnotation<DiffAnnotationMetadata>[]>(
-		() => [composerAnnotation, ...threadAnnotations, ...hunkAnnotations],
-		[composerAnnotation, hunkAnnotations, threadAnnotations],
+		() => [composerAnnotation, ...threadAnnotations, ...hunkAnnotations, ...walkthroughAnnotations],
+		[composerAnnotation, hunkAnnotations, threadAnnotations, walkthroughAnnotations],
 	);
 	const threadById = useMemo(() => {
 		const result = new Map<string, { thread: ReviewThread; actions: ReviewThreadActions }>();
@@ -386,6 +402,16 @@ function PierreDiffSurface({
 								key={entry.thread.id}
 								thread={entry.thread}
 								actions={entry.actions}
+							/>
+						) : null;
+					}
+					if (metadata.kind === "walkthrough") {
+						const step = walkthroughStepByIndex.get(metadata.index);
+						return step && walkthrough ? (
+							<WalkthroughCard
+								key={`walkthrough:${step.index}`}
+								step={step}
+								onStep={walkthrough.onStep}
 							/>
 						) : null;
 					}

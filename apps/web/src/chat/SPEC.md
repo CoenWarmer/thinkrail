@@ -1237,7 +1237,11 @@ Unknown custom messages retain their existing behavior.
 - **`ChatView`** is the primary app-integration file: wires this session's runtime
   (`store.sessions[sessionId]`), the transport calls, the `ChatActions` + `AskStates` contexts, the
   divider's deep links (`onOpenChange` → `requestChangesView`, `onOpenSpec` → `requestSpecView`; each
-  receives the single path the user picked) plus its view switch (`onReveal` → the tool-reveal intent), and the
+  receives the single path the user picked), its view switch (`onReveal` → the tool-reveal intent), and its
+  per-turn walkthrough trigger (`onWalkthrough` → `requestWalkthrough(workspaceId, sessionId,
+  changedFiles)`, passed only when the welcome's protocol supports it — `selectWalkthroughAvailable`; the
+  divider renders its "Walk me through it" chip only when the turn changed files and the callback exists,
+  and the request is consumed panels-side by `ChangesPanel`, keeping chat→panels one-way), and the
   `isSpec` classifier it builds from the store's `specsByWorkspace` snapshot (subscribed as the stored array
   — a stable ref — and memoized into a matcher here, never a fresh Set inside the selector) — together with
   **`useHistorySearch.ts`** (the Ctrl+R history-recall overlay's store/transport edge),

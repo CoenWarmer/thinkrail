@@ -215,6 +215,7 @@ import {
 	markClientStale,
 	releaseItemFix,
 } from "./todoReview";
+import { generateWalkthrough, type WalkthroughParams } from "./walkthrough";
 
 const log = logger("host");
 
@@ -655,6 +656,7 @@ const handlers: Record<string, Handler> = {
 		return gitDiffFile(p.workspaceId, p.path, p.scope);
 	},
 	"git.listCommits": (params) => listCommits((params as { workspaceId: string }).workspaceId),
+	"walkthrough.generate": (params) => generateWalkthrough(params as WalkthroughParams),
 	"change.revert": (params) => {
 		const p = params as RevertChangeParams;
 		void ensureWatch(p.workspaceId);

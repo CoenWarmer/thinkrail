@@ -31,8 +31,17 @@ surface** — no wire method; consumers are host-side flows.
     timeout / no usable steps / empty output). `toPlanSummary(raw)` is the pure output guard (strip a code
     fence and a leading `Summary:` label, clamp length; `null` when empty). The host persists the result
     only when non-null; it never overwrites an agent-authored `plan.summary`.
+  - `suggestWalkthrough(hunks, context?)` → ordered walkthrough drafts (`{ hunk, title, body }`,
+    referencing the caller's hunk inventory by index, each hunk at most once) for the "Walk me through
+    it" feature, or `null` (best-effort, same degrade rules). Runs on the **default** tier — ordering
+    and explaining a whole change set is the one assist task where cheap-model quality visibly fails.
+    `toWalkthroughDrafts(raw, hunkCount)` is the pure output guard (fence-tolerant JSON parse, index
+    bounds + dedupe, title/body clamp); `buildWalkthroughPrompt` is exported for tests. The **host**
+    owns hunk inventory construction, session-context assembly, anchor mapping, and appending hunks
+    the model skipped; `setWalkthroughRunner(fn)` is this task's runner seam.
 - **Public surface (barrel):** `setOneShotRunner`, `suggestPlanSummary`, `toPlanSummary`, `OneShotRunner`,
-  `PlanSummaryStep`.
+  `PlanSummaryStep`, `setWalkthroughRunner`, `suggestWalkthrough`, `toWalkthroughDrafts`,
+  `buildWalkthroughPrompt`, `WalkthroughHunkInput`, `WalkthroughStepDraft`.
 - **Allowed deps:** `agent` (the `completeOnce`/`OneShotRequest`/`OneShotResult` primitive, via its
   barrel); Node.
 - **Forbidden:** `host`; **`@earendil-works/pi-ai` / `pi-coding-agent` directly** (model access + dispatch

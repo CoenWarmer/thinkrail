@@ -37,6 +37,7 @@ import {
 	selectCompactionTurnIds,
 	selectReadyCompletionActivation,
 	selectSkillsStale,
+	selectWalkthroughAvailable,
 	selectWorkspaceById,
 	specPathMatcher,
 	toast,
@@ -893,6 +894,14 @@ export default function ChatView({
 		[workspaceId],
 	);
 
+	const walkthroughSupported = useAppStore(selectWalkthroughAvailable);
+	const onWalkthrough = useCallback(
+		(paths: string[]) => {
+			useAppStore.getState().requestWalkthrough(workspaceId, sessionId, paths);
+		},
+		[workspaceId, sessionId],
+	);
+
 	const askStates = useMemo(
 		() => deriveAskStates(runtime.turns, runtime.askAnswers, runtime.toolResults),
 		[runtime.turns, runtime.askAnswers, runtime.toolResults],
@@ -1118,6 +1127,7 @@ export default function ChatView({
 												onOpenSpec={onOpenSpec}
 												onOpenChange={onOpenChange}
 												onReveal={onReveal}
+												onWalkthrough={walkthroughSupported ? onWalkthrough : undefined}
 												onTryAgain={() => performSend(TRY_AGAIN_PROMPT, [], "send")}
 											/>
 										</FoldGeometryProvider>

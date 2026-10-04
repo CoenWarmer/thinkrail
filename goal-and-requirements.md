@@ -96,6 +96,10 @@ What ThinkRail does, at product level; the linked spec owns the detail.
   `central` CLI ([[submodule-server-auth]], [[central-integration]]).
 - **Agent tools** — web research and inline diagrams and comparisons in chat
   ([[submodule-web-chat-tools-web]], [[pi-visualize-module]]).
+- **Runtime metrics** — a running build of the project pushes OpenTelemetry traces to the host;
+  code-attributed timings surface as inline hints in the desktop file editor, an ingest-liveness
+  indicator in the chat toolbar, and an on-demand `metrics_query` tool for the agent
+  ([[submodule-server-metrics]]).
 - **Around the workspace** — open a worktree in an installed editor or IDE, and keep the app itself up
   to date ([[submodule-server-editors]], [[submodule-web-updates]]).
 - **Brand** — ThinkRail green accent (bright on dark themes, deepened on light ones so it clears AA on

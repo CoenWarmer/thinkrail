@@ -101,7 +101,7 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
     alike, so a Central or delegation-mirrored provider is readable before its availability pass lands. Being
     the one read makes the picker, default, and model resolution agree within a generation.
   - `agentSessionManager` — sessions keyed by `session.sessionId` (each `Entry` also tracks its
-    `workspaceId`), `createSession({ cwd, workspaceId, model?, thinkingLevel? })` → `createAgentSession(...)`
+    `workspaceId`), `createSession({ cwd, workspaceId, model?, thinkingLevel?, capabilityOverrides? })` → `createAgentSession(...)`
     with a per-session `SessionManager` **and a `buildSessionSettings(cwd)` settings manager** (the user's
     real settings + an in-memory `images.autoResize:false` override — never persisted — so the `read` tool
     sends image files **raw**, bypassing pi's photon/WASM resizer that the single-file binary can't bundle;
@@ -568,7 +568,7 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
     raw third-party `.ts` must stay out of the strict tsc graph.
   - `extensions` — Pi resource wiring. Candidate generation loads the reviewed external Central path once
     through a headless `DefaultResourceLoader` to apply provider registrations, without inspecting it.
-    `buildResourceLoader(cwd, settingsManager, getAdmission, excludedPaths, extraFactories?)` then resolves
+    `buildResourceLoader(cwd, settingsManager, getAdmission, excludedPaths, extraFactories?, waiters?, capabilityOverrides?)` then resolves
     Pi's normal settings/package +
     `.pi` / `.agents` extension set, removes that exact opaque identity **before loading**, and explicitly loads
     the remaining paths: sessions use the provider objects already owned by their retained generation, so
@@ -579,7 +579,26 @@ answer-injection path, and the **restart repair** that keeps re-opened transcrip
     automatic **portable cross-agent skill aliases**, then loads the five bundled extensions — **`pi-web-access`**
     (`web_search` + `fetch_content`), **`pi-visualize`** (`visualize`), **`pi-spec-graph`** (the `spec_*`
     tools + its `before_agent_start` rule), **`pi-thinkrail-workflow`** (the workflow-router rule +
-    workflow skills), and **`pi-todos`** (the `todo_*` tools + its skill). Existing personal aliases are Claude
+    workflow skills), and **`pi-todos`** (the `todo_*` tools + its skill).
+    **Capability overrides** (`SessionCapabilityOverrides`, set only by the host's eval runner — architecture
+    Decision #20): `excludedExtensionIds` names bundled packages (e.g. `pi-spec-graph`) and/or discovered
+    extension paths to drop before loading, and `skillsAllowlist` post-filters admitted skills by name.
+    `CreateSessionInput.capabilityOverrides` additionally carries `tools` (pi's native allowlist; the `Entry`
+    remembers it so the subagent/review tool refreshers never re-add a tool the allowlist omits) and
+    `systemPromptSuffix` (an inline `before_agent_start` extension appending to `appendSystemPrompt`).
+    Bundled-extension identity is positional: `BUNDLED_EXTENSION_PACKAGES` in `buildSupport.ts` is the single
+    load-order list, and both the binary's generated `bundledExtensionFactories` array and dev mode's resolved
+    extension paths are index-aligned with it — excluding by package name filters the same index in either
+    mode; an excluded id that is neither a bundled package name nor a discovered extension path **fails
+    session creation loudly** (a silently ignored treatment would corrupt an experiment). Skill availability
+    is governed solely by the skills allowlist: excluding an extension drops its tools and prompt
+    contributions, never its bundled skills (per-package skill dirs are not identifiable in the binary's
+    shared staged skills root). Overrides are **parent-session-only and non-persistent**: they never reach
+    `childExtensionFactories()` (moot for eval trials — synthetic `eval:*` workspace ids resolve
+    `subagentsEnabled` to false, so no child sessions spawn) and are not written to the session file, so a
+    reattached/restored session reverts to defaults — eval trial sessions are created fresh and disposed per
+    trial, never reattached.
+    Existing personal aliases are Claude
     (`${CLAUDE_CONFIG_DIR:-~/.claude}/skills`), Codex (`${CODEX_HOME:-~/.codex}/skills`), Copilot
     (`~/.copilot/skills`), and Gemini (`${GEMINI_CLI_HOME:-~}/.gemini/skills`), **plus each installed Claude
     plugin's `skills/` dir** (read from `~/.claude/plugins/installed_plugins.json` — the resolved `installPath`,

@@ -28,10 +28,12 @@ import { FileTree } from "../panels/FileTree";
 import { openFileInTab } from "../panels/openTabs";
 import { ProjectTree } from "../panels/ProjectTree";
 import "../panels/resources/register";
+import { EvalsPanel } from "../panels/EvalsPanel";
 import { ReviewPanel, selectActiveReviewedPath } from "../panels/ReviewPanel";
 import { reviewFlags } from "../panels/reviewModel";
 import { SpecsPanel } from "../panels/SpecsPanel";
 import { TerminalWorkbenchBody, useTerminalClose } from "../panels/TerminalWorkbench";
+import { useProjectEvals } from "../panels/useProjectEvals";
 import { useWorkspaceReview } from "../panels/useWorkspaceReview";
 import { useWorkspaceSpecs } from "../panels/useWorkspaceSpecs";
 import {
@@ -84,6 +86,7 @@ import { WorkspaceChatHistory } from "./WorkspaceChatHistory";
 
 const ChatView = lazy(() => import("../chat/ChatView"));
 const PlanPane = lazy(() => import("../panels/PlanPane"));
+const EvalResultsPane = lazy(() => import("../panels/EvalResultsPane"));
 
 const NO_EDITOR_TABS: EditorTab[] = [];
 
@@ -232,6 +235,7 @@ export function WorkspaceWorkbench({ workspaceId }: { workspaceId: string }) {
 	const deletedSessions = useAppStore((state) => state.deletedSessionsByWorkspace[workspaceId]);
 	const terminalClose = useTerminalClose();
 	const specs = useWorkspaceSpecs(workspaceId);
+	const evals = useProjectEvals(workspaceId);
 	const review = useWorkspaceReview(workspaceId);
 	const reviewComments = useAppStore((state) => state.reviewsByWorkspace[workspaceId]?.comments);
 	const reviewDraftCount = useAppStore((state) => selectReviewDraftCount(state, workspaceId));
@@ -452,6 +456,15 @@ export function WorkspaceWorkbench({ workspaceId }: { workspaceId: string }) {
 				return <ChatResourceBody workspaceId={workspaceId} tab={tab} onOpenFile={openToolFile} />;
 			}
 			if (tab.kind === "document") {
+				if (tab.documentKind === "eval-experiment") {
+					return (
+						<ErrorBoundary label="eval results" resetKeys={[workspaceId, tab.id]}>
+							<Suspense fallback={<MissingResource label="eval results" />}>
+								<EvalResultsPane workspaceId={workspaceId} experimentId={tab.sourceId} />
+							</Suspense>
+						</ErrorBoundary>
+					);
+				}
 				if (deletedSessions?.[tab.sourceId]) return <MissingResource label="plan" />;
 				return (
 					<ErrorBoundary label="plan" resetKeys={[workspaceId, tab.id]}>
@@ -534,6 +547,13 @@ export function WorkspaceWorkbench({ workspaceId }: { workspaceId: string }) {
 					body = (
 						<QuietScrollArea className="h-full" viewportClassName="p-12">
 							<SpecsPanel workspaceId={workspaceId} failed={specs.failed} onRetry={specs.reload} />
+						</QuietScrollArea>
+					);
+					break;
+				case "evals":
+					body = (
+						<QuietScrollArea className="h-full" viewportClassName="p-12">
+							<EvalsPanel workspaceId={workspaceId} failed={evals.failed} onRetry={evals.reload} />
 						</QuietScrollArea>
 					);
 					break;

@@ -9,6 +9,7 @@ const roots: string[] = [];
 const modules = {
 	"packages/artifact-tests": "@thinkrail/artifact-tests",
 	"packages/contracts": "@thinkrail/contracts",
+	"packages/evals": "@thinkrail/evals",
 	"packages/shared": "@thinkrail/shared",
 	"packages/pi-delegation": "pi-delegation",
 	"packages/pi-background-commands": "pi-background-commands",
@@ -44,6 +45,7 @@ function fixture(): string {
 		"packages/pi-dag": { "pi-delegation": "workspace:*" },
 		"packages/server": {
 			"@thinkrail/contracts": "workspace:*",
+			"@thinkrail/evals": "workspace:*",
 			"@thinkrail/shared": "workspace:*",
 			"pi-delegation": "workspace:*",
 			"pi-background-commands": "workspace:*",

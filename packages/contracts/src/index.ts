@@ -28,6 +28,7 @@ export {
 	THEME_MODES,
 	TODO_NUDGE_PREFIX,
 } from "./domain";
+export type * from "./evalProtocol";
 export type * from "./nativeClient";
 export type * from "./piProtocol";
 export { assistantToolCallsAreExecutable, isTranscriptMessageRole } from "./piProtocol";

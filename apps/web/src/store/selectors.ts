@@ -2,6 +2,7 @@ import {
 	ANALYTICS_CONSENT_PROTOCOL_VERSION,
 	type BackgroundCommandSummary,
 	CHAT_RESOURCES_PROTOCOL_VERSION,
+	type EvalTrialRecord,
 	type GitDiffScope,
 	type Project,
 	SESSION_RENAME_PROTOCOL_VERSION,
@@ -716,4 +717,52 @@ export function selectAgentReviewCommentCount(
 	return snapshot.comments.filter(
 		(c) => c.author === "agent" && c.status !== "resolved" && c.status !== "dismissed",
 	).length;
+}
+
+export interface EvalConditionAggregate {
+	conditionId: string;
+	trials: number;
+	passRate: number | null;
+	avgCostUsd: number | null;
+	avgDurationMs: number | null;
+	avgTurns: number | null;
+}
+
+export function selectEvalConditionAggregates(
+	state: { evalTrialsByExperiment: Record<string, EvalTrialRecord[]> },
+	experimentId: string,
+): EvalConditionAggregate[] {
+	return aggregateEvalTrials(state.evalTrialsByExperiment[experimentId] ?? []);
+}
+
+export function aggregateEvalTrials(trials: readonly EvalTrialRecord[]): EvalConditionAggregate[] {
+	const order: string[] = [];
+	const grouped = new Map<string, EvalTrialRecord[]>();
+	for (const trial of trials) {
+		if (!grouped.has(trial.conditionId)) {
+			grouped.set(trial.conditionId, []);
+			order.push(trial.conditionId);
+		}
+		grouped.get(trial.conditionId)?.push(trial);
+	}
+	return order.map((conditionId) => {
+		const rows = grouped.get(conditionId) ?? [];
+		const withEvent = rows.filter((t) => t.event !== null);
+		const costs = withEvent
+			.map((t) => t.event?.costUsd)
+			.filter((c): c is number => typeof c === "number");
+		return {
+			conditionId,
+			trials: rows.length,
+			passRate: rows.length === 0 ? null : rows.filter((t) => t.verdict.pass).length / rows.length,
+			avgCostUsd: average(costs),
+			avgDurationMs: average(withEvent.map((t) => t.event?.durationMs ?? 0)),
+			avgTurns: average(withEvent.map((t) => t.event?.turns ?? 0)),
+		};
+	});
+}
+
+function average(values: readonly number[]): number | null {
+	if (values.length === 0) return null;
+	return values.reduce((sum, v) => sum + v, 0) / values.length;
 }

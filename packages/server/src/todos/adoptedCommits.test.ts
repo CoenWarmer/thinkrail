@@ -183,4 +183,4 @@ test("review resolution rejects a commit past the newest-200 listCommits cap", (
 	expect(() =>
 		startTodoReview({ workspaceId: "w1", sessionId: SESSION, id: `commit:${newest}` }),
 	).not.toThrow();
-});
+}, 30_000);

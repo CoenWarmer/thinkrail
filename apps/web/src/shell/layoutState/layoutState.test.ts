@@ -4,6 +4,10 @@ import {
 	BUILTIN_LAYOUT_PRESETS,
 	closeLayoutTab,
 	collectAllGroups,
+	findLayoutTab,
+	isLayoutUnavailable,
+	openCenterTab,
+	primaryCenterGroupId,
 	resizeBottomRegion,
 	resizeSideRegion,
 	selectTab,
@@ -343,6 +347,41 @@ describe("frontend-local layout state", () => {
 
 		const restored = await ensureWorkspaceLayoutState("workspace");
 		expect(restored.left.width).toBe(0.31);
+	});
+
+	test("a persisted eval-experiment document tab survives reload (validator accepts the kind)", async () => {
+		const local = new MemoryStorage();
+		const session = new MemoryStorage();
+		session.setItem("thinkrail:layout-surface-id", "surface-eval");
+		setLayoutStateStorageForTests({ local, session }, endpoint);
+		const initial = await ensureWorkspaceLayoutState("workspace");
+		const opened = openCenterTab(
+			initial,
+			{
+				kind: "document",
+				id: "eval-tab",
+				name: "Results · exp-1",
+				documentKind: "eval-experiment",
+				sourceId: "exp-1",
+				docPath: "",
+			},
+			primaryCenterGroupId(initial),
+			"keep",
+		);
+		if (isLayoutUnavailable(opened)) throw new Error("open failed");
+		await commitWorkspaceLayout("workspace", opened.document);
+
+		resetLayoutStateForTests();
+		resetStore();
+		setLayoutStateStorageForTests({ local, session }, endpoint);
+
+		const restored = await ensureWorkspaceLayoutState("workspace");
+		const tab = findLayoutTab(restored, "eval-tab");
+		expect(tab).toMatchObject({
+			kind: "document",
+			documentKind: "eval-experiment",
+			sourceId: "exp-1",
+		});
 	});
 
 	test("native stable preferences restore layout after the host port changes", async () => {

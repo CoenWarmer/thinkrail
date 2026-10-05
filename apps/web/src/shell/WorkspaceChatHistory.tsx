@@ -1,10 +1,12 @@
 import {
+	RiFlaskLine as Flask,
 	RiHistoryLine as History,
 	RiLoader4Line as Loader2,
 	RiPencilLine as Pencil,
 	RiArrowGoBackLine as RotateCcw,
 	RiDeleteBin6Line as Trash2,
 } from "@remixicon/react";
+import { EVALS_PROTOCOL_VERSION } from "@thinkrail/contracts";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { menuItemClass } from "../components/ui/menu-styles";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -12,6 +14,7 @@ import { IconTooltip } from "../components/ui/tooltip";
 import { useNow } from "../components/useNow";
 import { cn, relativeTime } from "../lib";
 import { openChatInTab } from "../panels/openChat";
+import { fetchProjectEvals } from "../panels/useProjectEvals";
 import { type ClosedChat, toast, useAppStore } from "../store";
 import { errorText, getTransport } from "../transport";
 
@@ -204,6 +207,7 @@ function ClosedChatRow({
 					</IconTooltip>
 				)
 			) : null}
+			<PromoteToFixtureButton workspaceId={workspaceId} chat={chat} />
 			<IconTooltip label="Move chat to trash">
 				<button
 					type="button"
@@ -231,6 +235,47 @@ function ClosedChatRow({
 			</IconTooltip>
 		</div>
 	);
+}
+
+function PromoteToFixtureButton({ workspaceId, chat }: { workspaceId: string; chat: ClosedChat }) {
+	const supported = useAppStore(
+		(s) => s.protocolVersion !== null && s.protocolVersion >= EVALS_PROTOCOL_VERSION,
+	);
+	const [pending, setPending] = useState(false);
+	if (!supported) return null;
+	return (
+		<IconTooltip label="Promote to eval fixture">
+			<button
+				type="button"
+				data-testid="closed-chat-promote"
+				aria-label={`Promote ${chat.title} to an eval fixture`}
+				disabled={pending}
+				onClick={() => {
+					if (pending) return;
+					setPending(true);
+					void getTransport()
+						.request("eval.promote", { workspaceId, sessionId: chat.sessionId })
+						.then((result) => {
+							toast.success(`Fixture ${result.fixture.id} created — see the Evals panel.`);
+							return refreshProjectEvals(workspaceId);
+						})
+						.catch((error) => toast.error(errorText(error), "Couldn't promote the chat"))
+						.finally(() => setPending(false));
+				}}
+				className={cn(menuItemClass, "shrink-0 px-4 text-text-muted disabled:opacity-50")}
+			>
+				<Flask className="size-14" />
+			</button>
+		</IconTooltip>
+	);
+}
+
+async function refreshProjectEvals(workspaceId: string): Promise<void> {
+	try {
+		await fetchProjectEvals(workspaceId);
+	} catch {
+		// the panel's own hydration recovers on the next activation
+	}
 }
 
 const EMPTY_CHATS: ClosedChat[] = [];

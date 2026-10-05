@@ -1,6 +1,8 @@
 import type {
 	AppConfigUpdate,
 	AskUserQuestionResult,
+	EvalConfirmedBudget,
+	EvalExperiment,
 	ExtUiResponse,
 	GitDiffScope,
 	HistoryScope,
@@ -94,6 +96,18 @@ import {
 } from "../changes";
 import { selectDirectory } from "../dialog";
 import { listAvailableEditors, openEditor, revealInFileManager } from "../editors";
+import {
+	currentRunState as currentEvalRunState,
+	deleteExperiment as deleteEvalExperiment,
+	listExperiments as listEvalExperiments,
+	listFixtures as listEvalFixtures,
+	listTrials as listEvalTrials,
+	promoteSession as promoteEvalSession,
+	readTrialTranscript as readEvalTrialTranscript,
+	saveExperiment as saveEvalExperiment,
+	startRun as startEvalRun,
+	stopRun as stopEvalRun,
+} from "../evals";
 import { recordAcceptedMessage, respondToInterview } from "../feedback";
 import { readDir, readFile } from "../fs";
 import {
@@ -137,6 +151,7 @@ import {
 	sendableComments,
 	updateComment,
 } from "../reviews";
+import { captureSessionBaseline } from "../session-baseline";
 import { getConfig, updateConfig } from "../settings";
 import { evictSpecIndex, projectHasSpecs, specGraph } from "../spec";
 import {
@@ -189,6 +204,12 @@ import {
 } from "../workspaces";
 import { ackSend } from "./ackSend";
 import { sessionProviderAnalytics, trackChatStarted } from "./authAnalytics";
+import {
+	assertConditionCapabilities,
+	assertRunnableCondition,
+	evalCapabilities,
+	trialSessionFactory,
+} from "./evalsRunner";
 import { nudgeBaseRefWorkspaces } from "./fsNudge";
 import { buildHistoryScope } from "./historyScope";
 import { provisionInitialTerminal } from "./initialTerminal";
@@ -362,6 +383,7 @@ async function sendToFileChat(
 		thinkingLevel: defaults.thinkingLevel,
 	});
 	trackChatStarted(created);
+	void captureSessionBaseline(created.sessionId, ws.worktreePath);
 	await markCommentsSent(workspaceId, ids, created.sessionId);
 	fireReviewPrompt(workspaceId, ids, created.sessionId, pkg);
 	return { ...created, reused: false };
@@ -802,6 +824,7 @@ const handlers: Record<string, Handler> = {
 			thinkingLevel: defaults.thinkingLevel,
 		});
 		trackChatStarted(created);
+		void captureSessionBaseline(created.sessionId, ws.worktreePath);
 		return created;
 	},
 	"session.prompt": (params, ctx) => {
@@ -1189,6 +1212,86 @@ const handlers: Record<string, Handler> = {
 			if (sessions.length === 0) throw new Error("No draft comments to send.");
 			return { sessions };
 		});
+	},
+	"eval.fixtures": (params) => {
+		const p = params as { workspaceId: string };
+		return { fixtures: listEvalFixtures(getWorkspace(p.workspaceId).projectId) };
+	},
+	"eval.experiments": (params) => {
+		const p = params as { workspaceId: string };
+		return {
+			experiments: listEvalExperiments(getWorkspace(p.workspaceId).projectId),
+			run: currentEvalRunState(),
+		};
+	},
+	"eval.trials": (params) => {
+		const p = params as { experimentId: string };
+		return { trials: listEvalTrials(p.experimentId) };
+	},
+	"eval.promote": async (params) => {
+		const p = params as { workspaceId: string; sessionId: string; fixtureId?: string };
+		const ws = getWorkspace(p.workspaceId);
+		return {
+			fixture: await promoteEvalSession({
+				projectId: ws.projectId,
+				sessionId: p.sessionId,
+				cwd: ws.worktreePath,
+				...(p.fixtureId ? { fixtureId: p.fixtureId } : {}),
+			}),
+		};
+	},
+	"eval.saveExperiment": async (params) => {
+		const p = params as { workspaceId: string; experiment: EvalExperiment };
+		const ws = getWorkspace(p.workspaceId);
+		const needsCatalog = p.experiment.conditions.some((c) => c.tools || c.skills || c.extensions);
+		const capabilities = needsCatalog ? await evalCapabilities(ws.worktreePath) : null;
+		for (const condition of p.experiment.conditions) {
+			assertRunnableCondition(condition);
+			if (capabilities) assertConditionCapabilities(condition, capabilities);
+		}
+		return {
+			experiment: saveEvalExperiment(ws.projectId, p.experiment),
+		};
+	},
+	"eval.capabilities": (params) => {
+		const p = params as { workspaceId: string };
+		return evalCapabilities(getWorkspace(p.workspaceId).worktreePath);
+	},
+	"eval.deleteExperiment": (params) => {
+		const p = params as { workspaceId: string; experimentId: string };
+		if (currentEvalRunState()?.experimentId === p.experimentId)
+			throw new Error(`Experiment ${p.experimentId} is running — stop the run first.`);
+		deleteEvalExperiment(getWorkspace(p.workspaceId).projectId, p.experimentId);
+		return { ok: true as const };
+	},
+	"eval.run": (params) => {
+		const p = params as {
+			workspaceId: string;
+			experimentId: string;
+			confirmedBudget: EvalConfirmedBudget;
+		};
+		const projectId = getWorkspace(p.workspaceId).projectId;
+		if (!listEvalExperiments(projectId).some((e) => e.id === p.experimentId))
+			throw new Error(`Experiment ${p.experimentId} does not belong to this project.`);
+		startEvalRun({
+			experimentId: p.experimentId,
+			confirmedBudget: p.confirmedBudget,
+			factory: trialSessionFactory(p.experimentId),
+		});
+		return { started: true };
+	},
+	"eval.stop": (params) => {
+		const p = params as { experimentId: string };
+		return { stopping: stopEvalRun(p.experimentId) };
+	},
+	"eval.trialMessages": (params) => {
+		const p = params as {
+			experimentId: string;
+			conditionId: string;
+			trial: number;
+			sessionId: string;
+		};
+		return readEvalTrialTranscript(p);
 	},
 	"template.list": (params) => ({
 		templates: listTemplates(resolveTemplateReadDirs(params as TemplateReadLocation)),

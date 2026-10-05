@@ -53,6 +53,7 @@ import {
 	setLoginPublisher,
 	stopJbcentralRuntime,
 } from "../auth";
+import { setEvalsPublisher } from "../evals";
 import { redeliverInterview, releaseInterview, setFeedbackPublisher } from "../feedback";
 import { logger } from "../log";
 import {
@@ -89,6 +90,7 @@ import {
 	stopAllWatches,
 } from "../watch";
 import { getWorkspace, refreshUserOwnedWorkspace, setWorkspacePublisher } from "../workspaces";
+import { observeEvalSession } from "./evalsRunner";
 import { BLOB_PREFIX, FILES_PREFIX, serveBlob, serveWorktreeFile } from "./fileRoutes";
 import { setFsNudgePublisher } from "./fsNudge";
 import { handleRequest, requestMethodDiagnostic } from "./handlers";
@@ -294,6 +296,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 				if (hostUpdate) ws.subscribe(WS_CHANNELS.hostUpdateAvailable);
 				ws.subscribe(WS_CHANNELS.reviewChanged);
 				ws.subscribe(WS_CHANNELS.reviewFailed);
+				ws.subscribe(WS_CHANNELS.evalUpdate);
 				ws.subscribe(WS_CHANNELS.metricsUpdated);
 				const hostPlatform: HostPlatform =
 					process.platform === "darwin" || process.platform === "win32"
@@ -670,7 +673,15 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 		);
 	});
 
+	setEvalsPublisher((push) => {
+		server.publish(
+			WS_CHANNELS.evalUpdate,
+			JSON.stringify({ channel: WS_CHANNELS.evalUpdate, data: push }),
+		);
+	});
+
 	setSessionPublisher((payload) => {
+		observeEvalSession(payload.sessionId, payload.event);
 		runObservation.observe(payload.sessionId, payload.event);
 		if (payload.event.type === "tool_execution_start") {
 			const workspaceId = getSessionWorkspaceId(payload.sessionId);

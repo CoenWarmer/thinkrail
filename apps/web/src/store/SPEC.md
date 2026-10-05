@@ -130,7 +130,9 @@ selected-log state belong to chat integration, not domain persistence. See
   live chat runtimes, and resolved document markdown remain caches over their domain sources. Placement ids are stable within a workspace view; an id
   already owned by another semantic cache gets a collision-safe cache id. A virtual document is legal only
   when its local resource reference names a registered resolver plus durable source identity; `todo-plan`
-  resolves by session to the live `PlanPane`. Arbitrary inline markdown cannot enter persisted layout state.
+  resolves by session to the live `PlanPane`, and `eval-experiment` resolves by experiment id to the live
+  eval results pane (trials/aggregates re-read from the host, folded live from `eval.update`). Arbitrary
+  inline markdown cannot enter persisted layout state.
   An empty pre-hydration cache is never absence: a domain read must be authoritative for the current connection
   generation before reconciliation may prune a local reference.
 
@@ -465,7 +467,16 @@ ReviewSnapshot>`** with **`setWorkspaceReview`** (a `review.get` read landing) a
 **`applyReviewChanged`** (folds a `review.changed` push — full snapshot, idempotent; every client,
 including a mutation's initiator, converges here — no optimism); `applyWorkspaceRemoved` drops the
 entry; the pending-draft count is a selector (`selectReviewDraftCount`), never duplicated in
-components. The **Skills-reload badge** rides the same tick without a separate signal:
+components. The **eval slice** —
+**`evalsByProject: Record<projectId, { fixtures, experiments }>`** (evals are project-scoped by
+decision: fixtures replay a project's repo), **`evalRun: EvalRunState | null`** (one active run per
+host — a single global, not per-workspace), and **`evalTrialsByExperiment`** — with
+**`setProjectEvals`**/**`setEvalTrials`** (reads landing) and **`applyEvalUpdate`** (folds an
+`eval.update` push: run state replaces; an appended trial record dedupes by
+`conditionId`+`trial`, so replay/duplicate frames are idempotent; it appends only when that
+experiment's trials were already hydrated — never fabricates a partial list). Per-condition
+aggregates are a selector (`selectEvalConditionAggregates`), never component math. Workspace
+removal deliberately leaves the slice: the project outlives any one worktree. The **Skills-reload badge** rides the same tick without a separate signal:
   `noteFsChanged` also folds **`skillChangeTickByWorkspace: Record<workspaceId, tick>`** — the tick of the
   most recent *skill-relevant* batch, from the host-authored `payload.skillChange` semantic (`detected` for
   a concrete project-skill path, `unknown` for a genuinely pathless uncertainty, `none` for concrete

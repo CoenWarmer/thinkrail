@@ -31,14 +31,22 @@ function requiredPath(path: string): string {
 	return path;
 }
 
+/**
+ * The bundled pi extensions, in load order. This order is a cross-mode invariant: the binary's
+ * generated `bundledExtensionFactories` array and dev mode's resolved extension paths are both
+ * index-aligned with this list (see agent/SPEC.md).
+ */
+export const BUNDLED_EXTENSION_PACKAGES: readonly { name: string; skills?: boolean }[] = [
+	{ name: "pi-web-access" },
+	{ name: "pi-visualize" },
+	{ name: "pi-spec-graph", skills: true },
+	{ name: "pi-thinkrail-workflow", skills: true },
+	{ name: "pi-todos", skills: true },
+];
+
 export function resolveBuildRuntimeSources(): BuildRuntimeSources {
-	const extensions = [
-		{ specifier: "pi-web-access/index.ts" },
-		{ specifier: "pi-visualize/index.ts" },
-		{ specifier: "pi-spec-graph/index.ts", skills: true },
-		{ specifier: "pi-thinkrail-workflow/index.ts", skills: true },
-		{ specifier: "pi-todos/index.ts", skills: true },
-	].map(({ specifier, skills }) => {
+	const extensions = BUNDLED_EXTENSION_PACKAGES.map(({ name, skills }) => {
+		const specifier = `${name}/index.ts`;
 		const entry = require.resolve(specifier);
 		return {
 			specifier,

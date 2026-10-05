@@ -91,6 +91,8 @@ internals**. The edges between them are owned here (see the dependency graph), n
 | `dialog` | the host's native folder picker | [dialog/SPEC.md](src/dialog/SPEC.md) |
 | `editors` | detect installed editors/IDEs, launch one at a worktree, reveal a worktree in the file manager | [editors/SPEC.md](src/editors/SPEC.md) |
 | `history` | prompt recall + conversation search over pi's session files | [history/SPEC.md](src/history/SPEC.md) |
+| `session-baseline` | per-session start-state markers (HEAD + dirty patch) for retroactive eval-fixture promotion | [session-baseline/SPEC.md](src/session-baseline/SPEC.md) |
+| `evals` | experiment lifecycle: fixture/experiment stores + the single active run over `@thinkrail/evals` | [evals/SPEC.md](src/evals/SPEC.md) |
 | `templates` | file CRUD over pi's prompt-template dirs (global + project scoped) | [templates/SPEC.md](src/templates/SPEC.md) |
 | `metrics` | OTLP/HTTP JSON trace ingest → bounded in-memory per-workspace code-location aggregates | [metrics/SPEC.md](src/metrics/SPEC.md) |
 
@@ -102,7 +104,7 @@ the host from env via `bootHost` for dev/e2e.
 
 `host` is the **only composition root** — it wires each feature's handlers into the WS registry.
 
-- `host` → `projects`, `workspaces`, `git`, `github`, `branch-review`, `pr`, `fs`, `spec`, `todos`, `reviews`, `changes`, `watch`, `terminal`, `dialog`, `editors`, `agent`, `auth`, `assist`, `settings`, `history`, `templates`, `metrics`, `analytics`, `feedback`, `log`, `persistence` (`dataDir`, for the crash report)
+- `host` → `projects`, `workspaces`, `git`, `github`, `branch-review`, `pr`, `fs`, `spec`, `todos`, `reviews`, `changes`, `watch`, `terminal`, `dialog`, `editors`, `agent`, `auth`, `assist`, `settings`, `history`, `templates`, `metrics`, `analytics`, `feedback`, `log`, `session-baseline` (fire-and-forget capture beside each `createSession`), `persistence` (`dataDir`, for the crash report)
 - `workspaces` → `projects`, `git`, `persistence`
 - `branch-review` → `git`, `subprocess`
 - `pr` → `workspaces`, `git`, `todos`, `branch-review` (provider detection + gh-output parsing + the shared CLI runner), `github` (`ghSetupProblem` — the named compare-fallback reason)
@@ -129,6 +131,11 @@ the host from env via `bootHost` for dev/e2e.
 - `agent` → `log`, `persistence` (`dataDir` for delegation plus session lifecycle/receipt load-save operations),
   `trash` (a chat delete's recoverable transcript move) — otherwise the pi runtime alone; auth passes desired
   opaque Central paths through its public generation seam
+- `session-baseline` → `git`, `log`, `persistence` (`dataDir`) — never `agent`: the host composes capture
+  beside session creation
+- `evals` → `session-baseline` (marker reads), `log`, `persistence` (`dataDir`) — never `agent`: `host`
+  injects the trial session factory at `eval.run` (the reviews-pattern composition) and installs its
+  `setEvalsPublisher` seam
 - `metrics` → `workspaces` (worktree cwd for span-path normalization), `log` — memory-only, no
   `persistence` edge by decision; pushes through its `setMetricsPublisher` seam (`metrics.updated`),
   installed by `host`. The `metrics_query` tool lives in `agent` and delegates through a handler

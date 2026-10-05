@@ -10,6 +10,7 @@
         "@playwright/test": "1.61.0",
         "@thinkrail/artifact-tests": "workspace:*",
         "@thinkrail/contracts": "workspace:*",
+        "@thinkrail/evals": "workspace:*",
         "@thinkrail/server": "workspace:*",
         "@thinkrail/shared": "workspace:*",
         "husky": "9.1.7",
@@ -163,6 +164,14 @@
         "typescript": "catalog:",
       },
     },
+    "packages/evals": {
+      "name": "@thinkrail/evals",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/pi-background-commands": {
       "name": "pi-background-commands",
       "version": "0.0.0",
@@ -294,6 +303,7 @@
         "@earendil-works/pi-coding-agent": "catalog:",
         "@stroncium/procfs": "1.2.1",
         "@thinkrail/contracts": "workspace:*",
+        "@thinkrail/evals": "workspace:*",
         "@thinkrail/shared": "workspace:*",
         "bun-pty": "0.4.10",
         "diff": "catalog:",
@@ -1028,6 +1038,8 @@
     "@thinkrail/contracts": ["@thinkrail/contracts@workspace:packages/contracts"],
 
     "@thinkrail/desktop": ["@thinkrail/desktop@workspace:apps/desktop"],
+
+    "@thinkrail/evals": ["@thinkrail/evals@workspace:packages/evals"],
 
     "@thinkrail/server": ["@thinkrail/server@workspace:packages/server"],
 

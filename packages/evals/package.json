@@ -1,0 +1,19 @@
+{
+	"name": "@thinkrail/evals",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Eval/experiment framework: fixtures, conditions, trial records, capture, runner, report.",
+	"exports": {
+		".": "./index.ts",
+		"./package.json": "./package.json"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"devDependencies": {
+		"@types/bun": "catalog:",
+		"typescript": "catalog:"
+	}
+}

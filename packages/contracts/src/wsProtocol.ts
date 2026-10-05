@@ -54,6 +54,14 @@ import type {
 } from "./domain";
 import { isDelegationRunDetails } from "./domain";
 import type {
+	EvalCapabilities,
+	EvalConfirmedBudget,
+	EvalExperiment,
+	EvalFixtureSummary,
+	EvalRunState,
+	EvalTrialRecord,
+} from "./evalProtocol";
+import type {
 	AskUserAnswersDetails,
 	AskUserQuestionResult,
 	ExtUiResponse,
@@ -105,7 +113,8 @@ export type TemplateReadLocation =
 	| { projectId: string; workspaceId?: never }
 	| { workspaceId?: never; projectId?: never };
 
-export const PROTOCOL_VERSION = 76;
+export const PROTOCOL_VERSION = 79;
+export const EVALS_PROTOCOL_VERSION = 79;
 export const WALKTHROUGH_PROTOCOL_VERSION = 76;
 export const METRICS_PROTOCOL_VERSION = 76;
 export const CHANGE_MUTATIONS_PROTOCOL_VERSION = 75;
@@ -287,6 +296,16 @@ export const WS_METHODS = {
 	reviewSendComment: "review.sendComment",
 	reviewSendBatch: "review.sendBatch",
 	reviewClose: "review.close",
+	evalFixtures: "eval.fixtures",
+	evalExperiments: "eval.experiments",
+	evalTrials: "eval.trials",
+	evalPromote: "eval.promote",
+	evalSaveExperiment: "eval.saveExperiment",
+	evalRun: "eval.run",
+	evalStop: "eval.stop",
+	evalTrialMessages: "eval.trialMessages",
+	evalCapabilities: "eval.capabilities",
+	evalDeleteExperiment: "eval.deleteExperiment",
 	metricsSummary: "metrics.summary",
 	metricsForFile: "metrics.forFile",
 	templateList: "template.list",
@@ -319,6 +338,7 @@ export const WS_CHANNELS = {
 	feedbackInterview: "feedback.interview",
 	reviewChanged: "review.changed",
 	reviewFailed: "review.failed",
+	evalUpdate: "eval.update",
 	metricsUpdated: "metrics.updated",
 } as const;
 
@@ -774,6 +794,46 @@ export interface WsMethodMap {
 	"review.commentDelete": { params: { workspaceId: string; id: string }; result: Ack };
 	"review.fileDone": { params: { workspaceId: string; path: string }; result: Ack };
 	"review.close": { params: { workspaceId: string }; result: Ack };
+	"eval.fixtures": {
+		params: { workspaceId: string };
+		result: { fixtures: EvalFixtureSummary[] };
+	};
+	"eval.experiments": {
+		params: { workspaceId: string };
+		result: { experiments: EvalExperiment[]; run: EvalRunState | null };
+	};
+	"eval.trials": {
+		params: { experimentId: string };
+		result: { trials: EvalTrialRecord[] };
+	};
+	"eval.promote": {
+		params: { workspaceId: string; sessionId: string; fixtureId?: string };
+		result: { fixture: EvalFixtureSummary };
+	};
+	"eval.saveExperiment": {
+		params: { workspaceId: string; experiment: EvalExperiment };
+		result: { experiment: EvalExperiment };
+	};
+	"eval.run": {
+		params: { workspaceId: string; experimentId: string; confirmedBudget: EvalConfirmedBudget };
+		result: { started: boolean };
+	};
+	"eval.stop": {
+		params: { experimentId: string };
+		result: { stopping: boolean };
+	};
+	"eval.trialMessages": {
+		params: { experimentId: string; conditionId: string; trial: number; sessionId: string };
+		result: { messages: TranscriptMessage[] };
+	};
+	"eval.capabilities": {
+		params: { workspaceId: string };
+		result: EvalCapabilities;
+	};
+	"eval.deleteExperiment": {
+		params: { workspaceId: string; experimentId: string };
+		result: Ack;
+	};
 	"template.list": {
 		params: TemplateReadLocation;
 		result: { templates: TemplateInfo[] };

@@ -1231,6 +1231,55 @@ own section. The kebab menu (`plan-menu`, a
   workspace's last known tree while the re-read is in flight (there is nothing to reset), and the failed-read
   flag is workspace-scoped so it can't leak a hint over a sibling's good tree. It returns `{ failed, reload }`
   — `SpecsPanel`'s error-only Retry calls `reload` directly, so no retry counter has to be held in panel state.
+- **`EvalsPanel`** is the experiment-lifecycle surface (architecture Decision #20 phase 2): fixtures
+  (+ a promote-session picker over an on-demand `session.list` read), experiments with a
+  **multi-condition composer** over the full wire-representable treatment set (model, thinking
+  level, tool/skill/extension allowlists, specs toggle, prompt suffix — the `EvalCondition` type
+  makes others unrepresentable; checkbox options come from an `eval.capabilities` read on dialog
+  open, never a hardcoded list; "inherit" serializes nothing; the model field is a select over the
+  store's live `models` list — a stored model no longer available stays selectable, marked
+  "(unavailable)", and an empty models list falls back to the free-text input). Rows carry **Edit** (reopens the
+  composer prefilled; the id is locked — `eval.saveExperiment` overwrites by id, so renaming would
+  silently fork) and **Delete** (confirm dialog → `eval.deleteExperiment`, v79; recorded trials
+  stay in the corpus), both disabled while a run is active. Per-condition aggregates come from
+  `aggregateEvalTrials` on row expand (`eval.trials` read), the single run banner with
+  live cost + Stop, and the **budget-confirmation `ConfirmDialog` before every run** (restating
+  trials × budget; the host independently verifies the restated budget). Data arrives via
+  `useProjectEvals` — generation-guarded like `useWorkspaceRead`, but hydrating on workspace
+  activation and reconnect only, **never on worktree fs ticks**: eval state lives under the host
+  data dir, so a worktree change can't alter it and per-tick refetches would be pure churn. The
+  snapshot lands project-keyed (`evalsByProject`); post-mutation freshness comes from explicit
+  re-reads (panel reload, promote refresh — both through the one `fetchProjectEvals` read+fold) and
+  the `eval.update` push. Browser e2e covers the panel surface and promote picker only; running an
+  experiment needs a live agent spending real tokens, which is deliberately outside the mocked
+  browser suite (the headless live smoke and `bun run eval` own that path). A pre-v77 host renders a plain "not supported" body (layout
+  tools are static, so gating is the panel body's job). Errors surface as toasts; the panel holds
+  no transient run state of its own (the `eval.update` fold owns it). **Trial inspection** opens a
+  trial as a props-driven transcript dialog over `eval.trialMessages` (user/assistant markdown via
+  the chat `Markdown` primitive + compact tool-call lines — deliberately below full chat tool-card
+  fidelity; `ChatView` stays the only store/transport chat integration per the chat SPEC). While
+  the trial is the live one, every `eval.update` fold re-fetches the transcript — live watching is
+  push-driven re-reading, not a second stream. **Compare** renders two conditions side by side:
+  per-condition aggregates, the avg-cost delta, and each side's latest trial transcript.
+- **`EvalResultsPane`** is the main-pane results workbench for one experiment — the resolver behind
+  the `eval-experiment` document kind (store SPEC § persisted layout): `WorkspaceWorkbench` routes
+  `kind: "document", documentKind: "eval-experiment"` center tabs here with the experiment id as
+  `sourceId`; `openEvalResults(workspaceId, experimentId)` is the one opener (stable tab identity
+  `document/eval-experiment/<id>`, so re-opening focuses). On mount it re-reads `eval.trials` (+
+  `fetchProjectEvals` for the experiment definition); afterwards live freshness is the same
+  `eval.update` fold the panel uses — trial appends and run-state ticks re-render, never a second
+  stream. Content: header (fixture, per-condition knob summaries, budget, live run status with
+  Stop), the aggregates table, a trial list + inline transcript split, and an inline compare. The
+  compare grid (`ExperimentCompare`) holds two **(experiment, condition)** columns; in the pane the
+  candidate experiments are the project's experiments **sharing the open experiment's fixture** —
+  cross-fixture comparison is apples-to-oranges by the evals model (trial = fixture × condition),
+  so it is unrepresentable in the picker. A column's trials load lazily (`useExperimentTrials`:
+  store-first, one-shot `eval.trials` read when absent); condition options are the experiment's
+  declared conditions ∪ recorded trial conditions, so an untried condition shows "No trials" rather
+  than vanishing. The panel's compare dialog passes a single candidate (within-experiment compare);
+  the pane is the only cross-experiment surface. The presentational pieces shared with `EvalsPanel`
+  (transcript, aggregates table, compare grid, describe helpers) live in **`evalsShared.tsx`** —
+  the one seam between the panel and the pane; neither imports the other.
 - `SpecsPanel` is the read-only spec-graph viewer — a pure reader of that snapshot. One fetch per
   workspace activation, refetched automatically on the fs tick, rendered as the **`parent` tree** (roots =
   no/dangling parent; default-expanded). There is **no persistent Refresh control or panel toolbar row**:

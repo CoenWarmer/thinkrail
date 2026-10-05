@@ -29,7 +29,7 @@ export interface LayoutDocumentTab {
 	kind: "document";
 	id: string;
 	name: string;
-	documentKind: "todo-plan";
+	documentKind: "todo-plan" | "eval-experiment";
 	sourceId: string;
 	docPath: string;
 }

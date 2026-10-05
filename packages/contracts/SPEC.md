@@ -644,6 +644,37 @@ of the host.
   confirming the confirmations. This behavior is protocol-versioned — a replaying UI must never run against a
   pre-dedup host.
 
+## Evals (v77; condition knobs + capabilities at v78; experiment delete at v79)
+
+The `eval.*` surface (`EVALS_PROTOCOL_VERSION` 79) exposes the experiment lifecycle owned by
+architecture Decision #20. Shapes live in `evalProtocol.ts` and **mirror `@thinkrail/evals`' record
+schemas by shape** — contracts never imports that package; the server's evals module is where both
+sides meet. Reads: **`eval.fixtures`** / **`eval.experiments`** (experiments plus the single
+`EvalRunState | null` — one active run per host) / **`eval.trials`** (per-experiment
+`EvalTrialRecord[]`). Mutations: **`eval.promote`** (session → fixture; refused with an explanatory
+error when the session predates baseline capture), **`eval.saveExperiment`**, **`eval.run`** — whose
+`EvalConfirmedBudget` must restate the stored experiment's budget verbatim (the explicit
+spend-confirmation contract; the host rejects mismatches), **`eval.stop`**, and
+**`eval.deleteExperiment`** (v79, `{ workspaceId, experimentId }` → Ack — project-scoped; refused
+while that experiment's run is active; recorded trials stay in the shared corpus, only the
+definition is removed; editing needs no extra method since `eval.saveExperiment` overwrites by id).
+Push:
+**`eval.update`** (`EvalUpdatePush`: current run state + optionally the just-appended trial record).
+Live trial transcripts ride **`eval.trialMessages`** (`{experimentId, conditionId, trial,
+sessionId}` → `TranscriptMessage[]`) — `session.getMessages` requires a real workspace, and trial
+sessions live on synthetic ids; there is still no second *streaming* channel: the client re-reads
+on `eval.update` frames while a trial is live. `EvalCondition` carries **only the
+treatments the host binding supports** — since v78 that is model, thinking level, `tools`
+(allowlist), `skills` (allowlist), `extensions` (allowlist), `specsAvailable`, and `promptVariant`
+(literal system-prompt suffix text); widening it is the designated path for new treatments, so an
+unsupported knob is unrepresentable rather than silently ignored, and the host still **fails
+loudly** on names it cannot resolve. **`eval.capabilities`** (v78, `{ workspaceId }` →
+`EvalCapabilities`: tool/skill/extension catalogs as `{ id, description? }` entries) reports what a
+trial session for that workspace would actually load — the composer's checkbox options come from
+this request, never a hardcoded list. Extension ids are bundled package names (`pi-spec-graph`),
+worktree-relative paths for project-local extensions (so the id survives the worktree → trial-clone
+move), or absolute paths for user-scope extensions.
+
 ## Chat Resources
 
 The current-chat resource view is a projection of two existing capability owners, not a generic

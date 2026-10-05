@@ -475,6 +475,23 @@ channel fan-out, and the process-boot wrapper both launchers share.
 `RunningServer.startAttributionClaim()` is the explicit launcher-readiness signal and rechecks the saved
 enabled/confirmed choice before entering analytics attribution.
 
+**Evals composition.** `host` is where [[submodule-server-evals]] meets `agent`:
+`evalsRunner.ts` builds the injected `TrialSessionFactory` over `createSession`/`promptSession`/
+`abortSession`/`removeSession`, with trial sessions on synthetic `eval:<experiment>:<n>` workspace
+ids (never a user workspace's chat list) and model refs resolved by provider+id only. Trial event
+delivery taps the single `setSessionPublisher` subscriber (`observeEvalSession` beside the existing
+observers) — pi.event forwarding to clients is untouched, which is what makes live trial watching
+free. Condition knobs are validated at `eval.saveExperiment` time: `assertRunnableCondition` (model /
+thinking level, sync) plus `assertConditionCapabilities` against `evalCapabilities(worktree)` — the
+same `listSessionCapabilityCatalog` a trial session's loader would resolve, under the same untrusted
+`TRIAL_ADMISSION` context — so a bad model, tool, skill, or extension name is refused before any
+stored experiment can reach a paid run. The factory re-validates per trial when mapping condition →
+`capabilityOverrides` (tools/skills allowlists pass through; the `extensions` allowlist inverts into
+`excludedExtensionIds` against the trial-workspace catalog; `specsAvailable: false` adds
+`pi-spec-graph`; `promptVariant` becomes `systemPromptSuffix`), and `buildResourceLoader` itself
+fails loudly on an unknown exclusion. `eval.capabilities` serves the same catalog to the composer so
+its checkbox options can never drift from what a trial loads.
+
 - **Public surface (barrel):** `createServer`, `CreateServerOptions`, `RunningServer`, `bootHost`,
   `BootHostOptions`, `BootedHost`, `BuildKind`.
 - **Allowed deps:** `contracts` (`PROTOCOL_VERSION`, feature-introduction versions, `WS_CHANNELS`); `shared` (`freePort`, `shellEnv` — for

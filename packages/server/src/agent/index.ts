@@ -12,10 +12,14 @@ export { type ReviewSubagentRun, readChildTranscript, runReviewSubagent } from "
 export {
 	type BundledExtensionFactory,
 	type BundledExtensions,
+	type CapabilityCatalogEntry,
 	listProjectAliasSkillNames,
+	listSessionCapabilityCatalog,
 	listSkillCatalog,
 	listSkillCommands,
 	registerBundledRuntime,
+	type SessionCapabilityCatalog,
+	type SessionCapabilityOverrides,
 } from "./extensions";
 export {
 	METRICS_QUERY_TOOL_NAME,

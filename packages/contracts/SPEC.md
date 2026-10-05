@@ -425,6 +425,16 @@ of the host.
   what `template.list` returns; deliberately body-free so a listing never ships every file's full text),
   and **`Template`** (`TemplateInfo` + full `content` — frontmatter + body — the by-name
   `template.get`/`template.save` shape);
+  **runtime-metrics DTOs (v76, `METRICS_PROTOCOL_VERSION`)** — **`MetricsLocation`** (one code
+  location's aggregated runtime stats: call/error counts, p50/p95/max ms, `windowed` = rolling-window
+  vs lifetime-totals fallback; `path` workspace-relative, null when the running build reported a
+  location outside the worktree), **`MetricsFileAnnotation`** (a `metrics.forFile` row —
+  `MetricsLocation` minus the file identity the request named), **`MetricsSummary`** (ingest status +
+  hottest locations; `ingestPath` is **host-relative** — the client composes the full ingest URL
+  against its own transport endpoint, since the host doesn't know its external hostname;
+  `lastReceivedAt: null` = never received) and **`MetricsUpdatedPayload`** (the throttled
+  `metrics.updated` push: changed workspace-relative paths). Facts only cross the wire —
+  receiving/stale liveness verdicts are client view tuning ([[submodule-server-metrics]]);
   **layout preset DTO** — portable **`LayoutPreset`**, the bounded resource-free frame grammar synchronized
   in `AppConfig.customLayoutPresets`: center topology, left/right/bottom group geometry, visibility/folds,
   bottom alignment, and singleton tools, but no workspace, file, diff, chat, document, terminal, preview,

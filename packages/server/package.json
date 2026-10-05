@@ -22,6 +22,7 @@
 		"@thinkrail/evals": "workspace:*",
 		"@thinkrail/shared": "workspace:*",
 		"bun-pty": "0.4.10",
+		"diff": "catalog:",
 		"pi-background-commands": "workspace:*",
 		"pi-delegation": "workspace:*",
 		"pi-spec-graph": "workspace:*",

@@ -21,6 +21,12 @@ export {
 	type SessionCapabilityCatalog,
 	type SessionCapabilityOverrides,
 } from "./extensions";
+export {
+	METRICS_QUERY_TOOL_NAME,
+	type MetricsQueryOutcome,
+	type MetricsQueryParams,
+	setMetricsQueryHandler,
+} from "./metricsQueryTool";
 export * from "./oneshot";
 export {
 	activatePiRuntimeGeneration,

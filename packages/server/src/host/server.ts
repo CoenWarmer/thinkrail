@@ -25,6 +25,7 @@ import {
 	refreshSubagentTools,
 	setAgentReviewEnabledResolver,
 	setExtUiPublisher,
+	setMetricsQueryHandler,
 	setReviewCommentHandler,
 	setSessionCreatedPublisher,
 	setSessionDeletedPublisher,
@@ -55,6 +56,14 @@ import {
 import { setEvalsPublisher } from "../evals";
 import { redeliverInterview, releaseInterview, setFeedbackPublisher } from "../feedback";
 import { logger } from "../log";
+import {
+	fileAnnotations,
+	handleMetricsIngest,
+	METRICS_INGEST_PREFIX,
+	metricsSummary,
+	setMetricsPublisher,
+	topLocations,
+} from "../metrics";
 import { loadWorkspaces } from "../persistence";
 import {
 	getProjects,
@@ -250,6 +259,9 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 			if (url.pathname.startsWith(BLOB_PREFIX)) {
 				return serveBlob(url.pathname, req.signal);
 			}
+			if (url.pathname.startsWith(METRICS_INGEST_PREFIX)) {
+				return handleMetricsIngest(req, url.pathname);
+			}
 			if (staticDir) {
 				return serveStatic(url.pathname, staticDir);
 			}
@@ -285,6 +297,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 				ws.subscribe(WS_CHANNELS.reviewChanged);
 				ws.subscribe(WS_CHANNELS.reviewFailed);
 				ws.subscribe(WS_CHANNELS.evalUpdate);
+				ws.subscribe(WS_CHANNELS.metricsUpdated);
 				const hostPlatform: HostPlatform =
 					process.platform === "darwin" || process.platform === "win32"
 						? process.platform
@@ -561,6 +574,12 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 	setWatchPublisher(publishFsChanged);
 	setSkillPathClassifier(isProjectSkillPath);
 	setFsNudgePublisher(publishFsChanged);
+	setMetricsPublisher((payload) => {
+		server.publish(
+			WS_CHANNELS.metricsUpdated,
+			JSON.stringify({ channel: WS_CHANNELS.metricsUpdated, data: payload }),
+		);
+	});
 
 	setRepoMetaPublisher((workspaceId) => {
 		refreshUserOwnedWorkspace(workspaceId);
@@ -585,6 +604,19 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 	setReviewCommentHandler((sessionId, commentId, note) => ({
 		resolvedBody: resolveCommentFromAgent(sessionId, commentId, note).body,
 	}));
+	setMetricsQueryHandler((sessionId, params) => {
+		const workspaceId = getSessionWorkspaceId(sessionId);
+		if (!workspaceId) throw new Error("This session is not attached to a workspace.");
+		const summary = metricsSummary(workspaceId);
+		const limit = params.limit ?? 10;
+		return {
+			summary,
+			topLocations: topLocations(workspaceId, limit),
+			...(params.path !== undefined
+				? { file: { path: params.path, annotations: fileAnnotations(workspaceId, params.path) } }
+				: {}),
+		};
+	});
 	installRequestReviewSeam();
 	setTitleToolHost(titleToolHost);
 	reconcilePendingReviewsOnBoot();
@@ -737,6 +769,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<R
 		closeAllTerminals();
 		setFeedbackPublisher(null);
 		setSettingsPublisher(null);
+		setMetricsPublisher(null);
 		setJbcentralAppliedPublisher(() => {});
 		setJbcentralChangedPublisher(() => {});
 		server.stop(true);

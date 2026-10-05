@@ -620,7 +620,15 @@ from their `toolCall` args and reply through **`ChatActions`** (see below). Work
   directly via `thinking_level_changed`. Its rows follow the **live catalog** — `ChatView` resolves the
   session's model through `store`'s `selectCatalogModel` before passing it down, rather than reading the
   session's own snapshot, so a `model.refresh` that changes what a model supports changes the offered
-  levels with it), `SessionStatsBar`, `ChatHeader` (the fixed, single-line **panel-header row** —
+  levels with it), `SessionStatsBar`, **`MetricsIndicator`** (the chat-toolbar runtime-metrics ingest
+  indicator: props-driven over `{ summary, now, ingestUrl }` and **always visible** — a dot + "metrics"
+  label whose `data-status` is `never` (muted) until the workspace has ever received an OTLP batch,
+  `receiving` while `lastReceivedAt` is within 30s of `now`, and `stale` after; the liveness verdict is
+  this client view tuning, never the host's, per [[submodule-server-metrics]]. Its click popover is the
+  **primary setup discovery surface**: the workspace's copy-paste ingest URL — composed by `ChatView`
+  from the transport's `httpBase()` + the summary's host-relative `ingestPath`, so `/ingest` is also on
+  the Vite dev-proxy list — plus the OTLP `http/json` requirement, and, once data has flowed, service
+  names and last-received age. `ChatView` feeds it `useWorkspaceMetrics` + `useNow`), `ChatHeader` (the fixed, single-line **panel-header row** —
   `h-panel-header-row` (`--panel-header-row-height`, currently 32px), the shared structural geometry with
   workbench Group Headers and the Changes toolbar, not a value pinned here; it never scrolls,
   and constrained widths clip/truncate TODO + status/usage text while preserving the trailing Skills
@@ -1217,7 +1225,9 @@ Unknown custom messages retain their existing behavior.
   `useModelCatalog.ts`, **`useChatResources.ts`** (the Resources hydration/control/log-read seam),
   **`useSessionStats.ts`** (generation/revision-fenced authoritative telemetry reads),
   **`useTranscriptSync.ts`** (successful-compaction + connection-generation canonical transcript
-  reconciliation), `SkillsDialog.tsx`, `TemplateEditorDialog.tsx`,
+  reconciliation), **`useWorkspaceMetrics.ts`** (the runtime-metrics hydrate-then-stream seam: reads
+  `metrics.summary` on mount and on every store `metricsByWorkspace` tick — the folded `metrics.updated`
+  push — and returns the workspace's summary), `SkillsDialog.tsx`, `TemplateEditorDialog.tsx`,
   `SubagentTranscriptDialog.tsx`. `useModelCatalog` is the shared
   models-catalog seam `panels/NewWorkspaceDialog` also imports per-file, so the two pickers cannot
   drift; on activation it **drops catalog authority synchronously** (a flag an earlier consumer set says
@@ -1237,7 +1247,14 @@ Unknown custom messages retain their existing behavior.
 - **`ChatView`** is the primary app-integration file: wires this session's runtime
   (`store.sessions[sessionId]`), the transport calls, the `ChatActions` + `AskStates` contexts, the
   divider's deep links (`onOpenChange` → `requestChangesView`, `onOpenSpec` → `requestSpecView`; each
-  receives the single path the user picked) plus its view switch (`onReveal` → the tool-reveal intent), and the
+  receives the single path the user picked), its view switch (`onReveal` → the tool-reveal intent), and its
+  per-turn walkthrough trigger (`onWalkthrough` → `requestWalkthrough(workspaceId, sessionId,
+  changedFiles)`, passed only when the welcome's protocol supports it — `selectWalkthroughAvailable`; the
+  divider renders its "Walk me through it" chip only when the turn changed files and the callback exists,
+  shows it disabled with a spinner while generation is busy (`walkthroughBusy` — ChatView derives it from
+  `walkthroughGenerating` plus a still-pending `walkthroughRequest`, covering the hand-off gap before the
+  panel consumes the request), and the request is consumed panels-side by `ChangesPanel`, keeping
+  chat→panels one-way), and the
   `isSpec` classifier it builds from the store's `specsByWorkspace` snapshot (subscribed as the stored array
   — a stable ref — and memoized into a matcher here, never a fresh Set inside the selector) — together with
   **`useHistorySearch.ts`** (the Ctrl+R history-recall overlay's store/transport edge),

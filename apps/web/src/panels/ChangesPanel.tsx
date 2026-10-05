@@ -1,6 +1,14 @@
+import {
+	RiCloseLine as Close,
+	RiGuideLine as Guide,
+	RiLoader4Line as Loader,
+	RiArrowRightSLine as Next,
+	RiArrowLeftSLine as Previous,
+} from "@remixicon/react";
 import type { GitStatus } from "@thinkrail/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QuietScrollArea } from "@/components/QuietScrollArea";
+import { IconTooltip } from "@/components/ui/tooltip";
 import { LoadingRegion } from "../components/Skeleton";
 import {
 	type CenterNavigationStamp,
@@ -9,6 +17,7 @@ import {
 	selectActiveEditorTab,
 	selectDiffBaseRef,
 	selectDiffScope,
+	selectWalkthroughAvailable,
 	selectWorkspaceById,
 	selectWorkspaceNavTick,
 	type TabIntent,
@@ -26,6 +35,83 @@ import { DiffStatBadge } from "./DiffStatBadge";
 import { openDiffInTab } from "./openTabs";
 import { ToggleSegment } from "./ToggleSegment";
 import { useWorkspaceRead } from "./useWorkspaceRead";
+import { goToWalkthroughStep, startWalkthrough } from "./walkthrough";
+
+function WalkthroughControl({
+	workspaceId,
+	hasChanges,
+}: {
+	workspaceId: string;
+	hasChanges: boolean;
+}) {
+	const available = useAppStore(selectWalkthroughAvailable);
+	const generating = useAppStore((s) => s.walkthroughGenerating[workspaceId] ?? false);
+	const walkthrough = useAppStore((s) => s.walkthroughByWorkspace[workspaceId]);
+	if (!available) return null;
+	if (walkthrough) {
+		return (
+			<span
+				data-testid="walkthrough-progress"
+				className="flex shrink-0 items-center gap-4 tr-text-metadata text-text-muted"
+			>
+				<Guide className="size-14 shrink-0" />
+				<IconTooltip label="Previous step">
+					<button
+						type="button"
+						data-testid="walkthrough-toolbar-previous"
+						aria-label="Previous step"
+						disabled={walkthrough.activeIndex === 0}
+						onClick={() => goToWalkthroughStep(workspaceId, walkthrough.activeIndex - 1)}
+						className="flex items-center text-text-subtle hover:text-text-default disabled:pointer-events-none disabled:text-control-disabled-text"
+					>
+						<Previous className="size-14" />
+					</button>
+				</IconTooltip>
+				{walkthrough.activeIndex + 1}/{walkthrough.steps.length}
+				<IconTooltip label="Next step">
+					<button
+						type="button"
+						data-testid="walkthrough-toolbar-next"
+						aria-label="Next step"
+						disabled={walkthrough.activeIndex + 1 >= walkthrough.steps.length}
+						onClick={() => goToWalkthroughStep(workspaceId, walkthrough.activeIndex + 1)}
+						className="flex items-center text-text-subtle hover:text-text-default disabled:pointer-events-none disabled:text-control-disabled-text"
+					>
+						<Next className="size-14" />
+					</button>
+				</IconTooltip>
+				<IconTooltip label="End the walkthrough">
+					<button
+						type="button"
+						data-testid="walkthrough-clear"
+						aria-label="End the walkthrough"
+						onClick={() => useAppStore.getState().clearWalkthrough(workspaceId)}
+						className="flex items-center text-text-subtle hover:text-text-default"
+					>
+						<Close className="size-14" />
+					</button>
+				</IconTooltip>
+			</span>
+		);
+	}
+	if (!hasChanges && !generating) return null;
+	return (
+		<button
+			type="button"
+			data-testid="walkthrough-start"
+			disabled={generating}
+			onClick={() => void startWalkthrough(workspaceId)}
+			className="flex shrink-0 items-center gap-4 rounded-[var(--radius-sm)] px-4 tr-text-metadata text-text-muted transition-colors hover:bg-control-bg-hovered hover:text-text-default disabled:pointer-events-none"
+		>
+			{generating ? (
+				<Loader className="size-14 shrink-0 animate-spin" />
+			) : (
+				<Guide className="size-14 shrink-0" />
+			)}
+			Walk me through it
+		</button>
+	);
+}
 
 export function ChangesPanel({ workspaceId }: { workspaceId: string }) {
 	const [status, setStatus] = useState<GitStatus | null>(null);
@@ -52,6 +138,7 @@ export function ChangesPanel({ workspaceId }: { workspaceId: string }) {
 				setStatus(result);
 				setError(null);
 				warnedRef.current = false;
+				useAppStore.getState().reconcileWalkthrough(workspaceId, scopeKey(scope), result.changes);
 			},
 			onFailure: (_id, failure) => {
 				if (wsErrorCode(failure) === "UNKNOWN_COMMIT") {
@@ -111,14 +198,33 @@ export function ChangesPanel({ workspaceId }: { workspaceId: string }) {
 		useAppStore.getState().clearChangesRequest();
 	}, [changesRequest, status, workspaceId, openDiff]);
 
+	const walkthroughRequest = useAppStore((s) => s.walkthroughRequest);
+	useEffect(() => {
+		if (!walkthroughRequest || walkthroughRequest.workspaceId !== workspaceId) return;
+		if (useAppStore.getState().walkthroughRequest !== walkthroughRequest) return;
+		useAppStore.getState().clearWalkthroughRequest();
+		void startWalkthrough(workspaceId, {
+			sessionId: walkthroughRequest.sessionId,
+			paths: walkthroughRequest.paths,
+		});
+	}, [walkthroughRequest, workspaceId]);
+
 	useEffect(() => {
 		if (activeDiffTab) setHighlighted(null);
 	}, [activeDiffTab]);
 
+	const walkthrough = useAppStore((s) => s.walkthroughByWorkspace[workspaceId]);
+	const walkthroughStepPath =
+		walkthrough && walkthrough.scopeKey === scopeKey(scope)
+			? (walkthrough.steps[walkthrough.activeIndex]?.path ?? null)
+			: null;
+
 	const isActive = (path: string) =>
-		activeDiffTab
-			? activeDiffTab.path === path && scopeKey(activeDiffTab.scope) === scopeKey(scope)
-			: highlighted === path;
+		walkthroughStepPath !== null
+			? walkthroughStepPath === path
+			: activeDiffTab
+				? activeDiffTab.path === path && scopeKey(activeDiffTab.scope) === scopeKey(scope)
+				: highlighted === path;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
@@ -148,6 +254,10 @@ export function ChangesPanel({ workspaceId }: { workspaceId: string }) {
 						/>
 					) : null}
 				</div>
+				<WalkthroughControl
+					workspaceId={workspaceId}
+					hasChanges={(status?.changes.length ?? 0) > 0}
+				/>
 				<ToggleSegment
 					testid="changes-toggle-list"
 					label="List"

@@ -167,6 +167,17 @@
 .review-comment-line {
 	background: var(--control-bg-hovered);
 }
+/* Runtime-metrics Monaco layer (metricsDecorations.ts): end-of-line injected hint + gutter heat
+   tint relative to the file's own hottest location. */
+.metrics-inline-hint {
+	color: var(--text-subtle);
+}
+.metrics-heat-warm {
+	background: var(--feedback-warning-subtle);
+}
+.metrics-heat-hot {
+	background: var(--feedback-error-subtle);
+}
 .review-comment-rail {
 	background: var(--text-subtle);
 }

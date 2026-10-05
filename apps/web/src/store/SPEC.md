@@ -455,7 +455,14 @@ selected-log state belong to chat integration, not domain persistence. See
   **`noteFsChanged(payload)`** (folds a `workspace.fsChanged` push: `tick` increments per frame;
   `paths`/`truncated` are the last batch) — panels select their workspace's entry and refetch on `tick`
   change (the store holds only the signal, never fetches; `applyWorkspaceRemoved` drops a removed
-  workspace's entry). The **review slice** — **`reviewsByWorkspace: Record<workspaceId,
+  workspace's entry). The **runtime-metrics slice** —
+  **`metricsByWorkspace: Record<workspaceId, { tick, paths, summary }>`** with
+  **`noteMetricsUpdated(payload)`** (folds a `metrics.updated` push: `tick` increments, `paths` is the
+  last batch's changed set, the held `summary` survives) and **`setMetricsSummary(workspaceId, summary)`**
+  (a `metrics.summary` read landing) — same shape and refetch-on-tick contract as `fsChangesByWorkspace`;
+  the store holds only the signal + last summary, never fetches, and `applyWorkspaceRemoved` drops the
+  entry; **`metricsLayerVisible`** (+ `setMetricsLayerVisible`) is the frontend-local Monaco
+  metrics-layer toggle — client view state, never `AppConfig`. The **review slice** — **`reviewsByWorkspace: Record<workspaceId,
 ReviewSnapshot>`** with **`setWorkspaceReview`** (a `review.get` read landing) and
 **`applyReviewChanged`** (folds a `review.changed` push — full snapshot, idempotent; every client,
 including a mutation's initiator, converges here — no optimism); `applyWorkspaceRemoved` drops the
@@ -548,7 +555,26 @@ ignored on read; no migration state exists. Opened by `ChangesPanel`.
 panel is diffing (read through **`selectDiffScope`**, which defaults to the shared, referentially stable
 `BRANCH_SCOPE`); keyed **per workspace**, not app-wide like `changesView`, because a scope belongs to that
 branch's review — a commit sha means nothing in another worktree — and dropped with the workspace in
-`applyWorkspaceRemoved`. The transient **`chatLocationRequest`** — the history-search jump
+`applyWorkspaceRemoved`.
+
+**`walkthroughByWorkspace`** is the ephemeral "Walk me through it" tour: per workspace one
+`WorkspaceWalkthrough { scopeKey, fingerprint, paths, steps, activeIndex }`, never browser-persisted and
+never host-owned — a reload or reconnect simply loses it. `fingerprint` (pure exported
+`walkthroughFingerprint(changes, paths)` — sorted per-file `path:status:added:removed` lines, restricted
+to the walkthrough's `paths` subset, `null` = whole scope) names the exact diff the tour was generated
+against; **`reconcileWalkthrough(workspaceId, scopeKey, changes)`** compares every fresh `git.status`
+snapshot against it and clears the *entire* walkthrough on any mismatch (the deliberate
+invalidate-everything model — there is no per-step outdated state). In-flight generation is fenced like
+chat-resource reads: `beginWalkthrough` advances and returns this workspace's
+`walkthroughGenerationByWorkspace` counter and sets `walkthroughGenerating`; `installWalkthrough` /
+`failWalkthrough` carry that generation back and are no-ops when it is stale, and `setDiffScope` both
+clears walkthrough + generating state and advances the counter so a generation begun under the old scope
+can never install under the new one. `setWalkthroughIndex` clamps to the step range;
+`applyWorkspaceRemoved` drops all three maps. The transient **`walkthroughRequest`**
+(`{ workspaceId, sessionId, paths }`, set by `requestWalkthrough` which also enqueues the Changes
+tool-reveal intent, cleared by `clearWalkthroughRequest` or workspace removal) is the chat→panels bridge
+for the TurnDivider's per-turn trigger: `ChangesPanel` consumes it and runs the generation flow, so `chat`
+never imports `panels`. The transient **`chatLocationRequest`** — the history-search jump
   deep link; the requester activates the target project+workspace, the workbench shell integration
   opens/hydrates the target
   chat, `ChatView` consumes + clears — is **`ChatLocationRequest { workspaceId, projectId, sessionId,

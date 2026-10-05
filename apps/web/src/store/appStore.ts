@@ -9,11 +9,14 @@ import type {
 	EvalUpdatePush,
 	ExtUiRequest,
 	GitDiffScope,
+	GitFileChange,
 	HostPlatform,
 	HostUpdateNotice,
 	LayoutPreset,
 	LoginFrame,
 	LoginPush,
+	MetricsSummary,
+	MetricsUpdatedPayload,
 	PiEvent,
 	Project,
 	RefreshedModels,
@@ -36,6 +39,7 @@ import type {
 	ThemeMode,
 	ThinkingLevel,
 	UserMessage,
+	WalkthroughStep,
 	WireModel,
 	Workspace,
 	WorkspaceFsChangedPayload,
@@ -141,6 +145,30 @@ export interface DocTab {
 	docPath: string;
 	sourceId: string;
 }
+export interface WorkspaceWalkthrough {
+	scopeKey: string;
+	fingerprint: string;
+	/** Null = whole scope; a list = the TurnDivider's per-turn file subset. */
+	paths: string[] | null;
+	steps: WalkthroughStep[];
+	activeIndex: number;
+}
+
+/** Identity of the diff a walkthrough was generated against: the status snapshot's per-file lines,
+ * restricted to the walkthrough's path subset. A mismatch on a later status means the diff moved and
+ * the whole walkthrough is invalidated. */
+export function walkthroughFingerprint(changes: GitFileChange[], paths: string[] | null): string {
+	const wanted = paths === null ? null : new Set(paths);
+	return changes
+		.filter((change) => wanted === null || wanted.has(change.path))
+		.map(
+			(change) =>
+				`${change.path}\u0000${change.status}\u0000${change.added ?? 0}\u0000${change.removed ?? 0}`,
+		)
+		.sort()
+		.join("\n");
+}
+
 export type DiffTabView = "split" | "inline";
 export interface DiffTab {
 	kind: "diff";
@@ -898,6 +926,10 @@ interface AppState {
 	evalTrialsByExperiment: Record<string, EvalTrialRecord[]>;
 	reviewFocusRequest: { workspaceId: string; commentId: string } | null;
 	fsChangesByWorkspace: Record<string, { tick: number; paths: string[]; truncated: boolean }>;
+	metricsByWorkspace: Record<
+		string,
+		{ tick: number; paths: string[]; summary: MetricsSummary | null }
+	>;
 	skillChangeTickByWorkspace: Record<string, number>;
 	skillsSyncedTickBySession: Record<string, number>;
 	activeLogin: LoginState | null;
@@ -996,7 +1028,27 @@ interface AppState {
 	setChangesView: (view: "list" | "tree") => void;
 	diffScopeByWorkspace: Record<string, GitDiffScope>;
 	setDiffScope: (workspaceId: string, scope: GitDiffScope) => void;
+	walkthroughByWorkspace: Record<string, WorkspaceWalkthrough>;
+	walkthroughGenerating: Record<string, true>;
+	walkthroughGenerationByWorkspace: Record<string, number>;
+	beginWalkthrough: (workspaceId: string) => number;
+	installWalkthrough: (
+		workspaceId: string,
+		generation: number,
+		walkthrough: Omit<WorkspaceWalkthrough, "activeIndex">,
+	) => void;
+	failWalkthrough: (workspaceId: string, generation: number) => void;
+	setWalkthroughIndex: (workspaceId: string, index: number) => void;
+	clearWalkthrough: (workspaceId: string) => void;
+	reconcileWalkthrough: (workspaceId: string, scopeKey: string, changes: GitFileChange[]) => void;
+	walkthroughRequest: { workspaceId: string; sessionId: string; paths: string[] } | null;
+	requestWalkthrough: (workspaceId: string, sessionId: string, paths: string[]) => void;
+	clearWalkthroughRequest: () => void;
 	noteFsChanged: (payload: WorkspaceFsChangedPayload) => void;
+	noteMetricsUpdated: (payload: MetricsUpdatedPayload) => void;
+	setMetricsSummary: (workspaceId: string, summary: MetricsSummary) => void;
+	metricsLayerVisible: boolean;
+	setMetricsLayerVisible: (visible: boolean) => void;
 	markSkillsSynced: (sessionId: string, syncedTick: number) => void;
 	updateFileTabContent: (
 		workspaceId: string,
@@ -1921,9 +1973,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 	reviewFocusRequest: null,
 	changesView: "list",
 	diffScopeByWorkspace: {},
+	walkthroughByWorkspace: {},
+	walkthroughGenerating: {},
+	walkthroughGenerationByWorkspace: {},
+	walkthroughRequest: null,
 	chatLocationRequest: null,
 	historyOpenRequest: null,
 	fsChangesByWorkspace: {},
+	metricsByWorkspace: {},
+	metricsLayerVisible: true,
 	skillChangeTickByWorkspace: {},
 	skillsSyncedTickBySession: {},
 	activeLogin: null,
@@ -2155,11 +2213,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 						? null
 						: state.pendingWorkspaceChatActivation,
 				fsChangesByWorkspace: omitKey(state.fsChangesByWorkspace, workspaceId),
+				metricsByWorkspace: omitKey(state.metricsByWorkspace, workspaceId),
 				resourceSnapshots: omitKey(state.resourceSnapshots, workspaceId),
 				sessionStateByWorkspace: omitKey(state.sessionStateByWorkspace, workspaceId),
 				skillChangeTickByWorkspace: omitKey(state.skillChangeTickByWorkspace, workspaceId),
 				specsByWorkspace: omitKey(state.specsByWorkspace, workspaceId),
 				diffScopeByWorkspace: omitKey(state.diffScopeByWorkspace, workspaceId),
+				walkthroughByWorkspace: omitKey(state.walkthroughByWorkspace, workspaceId),
+				walkthroughGenerating: omitKey(state.walkthroughGenerating, workspaceId),
+				walkthroughGenerationByWorkspace: omitKey(
+					state.walkthroughGenerationByWorkspace,
+					workspaceId,
+				),
+				walkthroughRequest:
+					state.walkthroughRequest?.workspaceId === workspaceId ? null : state.walkthroughRequest,
 				reviewsByWorkspace: omitKey(state.reviewsByWorkspace, workspaceId),
 				changesRequest:
 					state.changesRequest?.workspaceId === workspaceId ? null : state.changesRequest,
@@ -2580,8 +2647,90 @@ export const useAppStore = create<AppState>((set, get) => ({
 		set((s) =>
 			s.removedWorkspaceIds[workspaceId]
 				? {}
-				: { diffScopeByWorkspace: { ...s.diffScopeByWorkspace, [workspaceId]: scope } },
+				: {
+						diffScopeByWorkspace: { ...s.diffScopeByWorkspace, [workspaceId]: scope },
+						walkthroughByWorkspace: omitKey(s.walkthroughByWorkspace, workspaceId),
+						walkthroughGenerating: omitKey(s.walkthroughGenerating, workspaceId),
+						walkthroughGenerationByWorkspace: {
+							...s.walkthroughGenerationByWorkspace,
+							[workspaceId]: (s.walkthroughGenerationByWorkspace[workspaceId] ?? 0) + 1,
+						},
+					},
 		),
+	beginWalkthrough: (workspaceId) => {
+		const generation = (get().walkthroughGenerationByWorkspace[workspaceId] ?? 0) + 1;
+		set((s) =>
+			s.removedWorkspaceIds[workspaceId]
+				? {}
+				: {
+						walkthroughGenerationByWorkspace: {
+							...s.walkthroughGenerationByWorkspace,
+							[workspaceId]: generation,
+						},
+						walkthroughGenerating: Object.assign(Object.create(null), s.walkthroughGenerating, {
+							[workspaceId]: true,
+						}) as Record<string, true>,
+					},
+		);
+		return generation;
+	},
+	installWalkthrough: (workspaceId, generation, walkthrough) =>
+		set((s) => {
+			if (s.walkthroughGenerationByWorkspace[workspaceId] !== generation) return {};
+			return s.removedWorkspaceIds[workspaceId]
+				? { walkthroughGenerating: omitKey(s.walkthroughGenerating, workspaceId) }
+				: {
+						walkthroughGenerating: omitKey(s.walkthroughGenerating, workspaceId),
+						walkthroughByWorkspace: {
+							...s.walkthroughByWorkspace,
+							[workspaceId]: { ...walkthrough, activeIndex: 0 },
+						},
+					};
+		}),
+	failWalkthrough: (workspaceId, generation) =>
+		set((s) =>
+			s.walkthroughGenerationByWorkspace[workspaceId] === generation
+				? { walkthroughGenerating: omitKey(s.walkthroughGenerating, workspaceId) }
+				: {},
+		),
+	setWalkthroughIndex: (workspaceId, index) =>
+		set((s) => {
+			const walkthrough = s.walkthroughByWorkspace[workspaceId];
+			if (!walkthrough || index < 0 || index >= walkthrough.steps.length) return {};
+			return {
+				walkthroughByWorkspace: {
+					...s.walkthroughByWorkspace,
+					[workspaceId]: { ...walkthrough, activeIndex: index },
+				},
+			};
+		}),
+	clearWalkthrough: (workspaceId) =>
+		set((s) => ({ walkthroughByWorkspace: omitKey(s.walkthroughByWorkspace, workspaceId) })),
+	requestWalkthrough: (workspaceId, sessionId, paths) =>
+		set((s) =>
+			s.removedWorkspaceIds[workspaceId]
+				? {}
+				: {
+						layoutIntents: appendLayoutIntent(s.layoutIntents, {
+							kind: "reveal-tool",
+							workspaceId,
+							tool: "changes",
+						}),
+						walkthroughRequest: { workspaceId, sessionId, paths },
+					},
+		),
+	clearWalkthroughRequest: () => set({ walkthroughRequest: null }),
+	reconcileWalkthrough: (workspaceId, scopeKey, changes) =>
+		set((s) => {
+			const walkthrough = s.walkthroughByWorkspace[workspaceId];
+			if (!walkthrough) return {};
+			const current =
+				walkthrough.scopeKey === scopeKey &&
+				walkthrough.fingerprint === walkthroughFingerprint(changes, walkthrough.paths);
+			return current
+				? {}
+				: { walkthroughByWorkspace: omitKey(s.walkthroughByWorkspace, workspaceId) };
+		}),
 	noteFsChanged: (payload) =>
 		set((s) => {
 			if (s.removedWorkspaceIds[payload.workspaceId]) return {};
@@ -2601,6 +2750,33 @@ export const useAppStore = create<AppState>((set, get) => ({
 							},
 						}
 					: {}),
+			};
+		}),
+	noteMetricsUpdated: (payload) =>
+		set((s) => {
+			if (s.removedWorkspaceIds[payload.workspaceId]) return {};
+			const prev = s.metricsByWorkspace[payload.workspaceId];
+			return {
+				metricsByWorkspace: {
+					...s.metricsByWorkspace,
+					[payload.workspaceId]: {
+						tick: (prev?.tick ?? 0) + 1,
+						paths: payload.paths,
+						summary: prev?.summary ?? null,
+					},
+				},
+			};
+		}),
+	setMetricsLayerVisible: (visible) => set({ metricsLayerVisible: visible }),
+	setMetricsSummary: (workspaceId, summary) =>
+		set((s) => {
+			if (s.removedWorkspaceIds[workspaceId]) return {};
+			const prev = s.metricsByWorkspace[workspaceId];
+			return {
+				metricsByWorkspace: {
+					...s.metricsByWorkspace,
+					[workspaceId]: { tick: prev?.tick ?? 0, paths: prev?.paths ?? [], summary },
+				},
 			};
 		}),
 	markSkillsSynced: (sessionId, syncedTick) =>

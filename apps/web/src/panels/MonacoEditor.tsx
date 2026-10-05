@@ -5,6 +5,7 @@ import type { ResourceViewProps, SurfaceReview } from "@/resources";
 import { LoadingRegion } from "../components/Skeleton";
 import { useAppStore } from "../store";
 import { MonacoReviewZones } from "./MonacoReviewZones";
+import { buildMetricsLineDecorations } from "./metricsDecorations";
 import { decorateEditorContextMenus } from "./monacoMenuIcons";
 import {
 	EDITOR_THEME,
@@ -19,6 +20,7 @@ import {
 	attachReviewThreads,
 	type MonacoReviewZoneState,
 } from "./reviewWidgets";
+import { useFileMetrics } from "./useFileMetrics";
 
 function focusLine(review: SurfaceReview): number | null {
 	const range = review.focus?.anchor.selectors.find((selector) => selector.kind === "lineRange");
@@ -50,6 +52,10 @@ export default function MonacoEditor({
 		threads: [],
 		composer: null,
 	});
+	const [editorMounted, setEditorMounted] = useState(false);
+	const metricsVisible = useAppStore((state) => state.metricsLayerVisible);
+	const metricsAnnotations = useFileMetrics(resource.workspaceId, resource.path);
+	const metricsDecorationsRef = useRef<string[]>([]);
 	const onViewStateRef = useRef(onViewState);
 	onViewStateRef.current = onViewState;
 
@@ -68,6 +74,7 @@ export default function MonacoEditor({
 	const onMount: OnMount = (codeEditor) => {
 		stopThemeWatchRef.current = watchThemeSwap();
 		editorRef.current = codeEditor;
+		setEditorMounted(true);
 		menuIconsRef.current = decorateEditorContextMenus(codeEditor);
 		if (isEditorViewState(viewState)) codeEditor.restoreViewState(viewState);
 		if (review) {
@@ -85,6 +92,41 @@ export default function MonacoEditor({
 	useEffect(() => {
 		if (review) syncThreads(review);
 	}, [review, syncThreads]);
+
+	const text = content.kind === "text" ? content.text : "";
+
+	useEffect(() => {
+		const codeEditor = editorRef.current;
+		if (!editorMounted || !codeEditor) return;
+		const model = codeEditor.getModel();
+		const decorations =
+			metricsVisible && model
+				? buildMetricsLineDecorations(metricsAnnotations, model.getLineCount()).map(
+						(decoration) => {
+							const column = model.getLineMaxColumn(decoration.line);
+							return {
+								range: {
+									startLineNumber: decoration.line,
+									startColumn: column,
+									endLineNumber: decoration.line,
+									endColumn: column,
+								},
+								options: {
+									isWholeLine: true,
+									after: { content: decoration.hint, inlineClassName: "metrics-inline-hint" },
+									...(decoration.heat !== "cool"
+										? { linesDecorationsClassName: `metrics-heat-${decoration.heat}` }
+										: {}),
+								},
+							};
+						},
+					)
+				: [];
+		metricsDecorationsRef.current = codeEditor.deltaDecorations(
+			metricsDecorationsRef.current,
+			decorations,
+		);
+	}, [editorMounted, metricsVisible, metricsAnnotations, text]);
 
 	useEffect(() => {
 		if (!review || !editorRef.current) return;
@@ -106,7 +148,6 @@ export default function MonacoEditor({
 		[],
 	);
 
-	const text = content.kind === "text" ? content.text : "";
 	return (
 		<>
 			<MonacoReact

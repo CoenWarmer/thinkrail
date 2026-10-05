@@ -180,7 +180,32 @@ treatment.
   and the chat header, not a value pinned here — that says **what** is being diffed via the
   **`ChangesScopeMenu`** scope pill + the shared **`BranchPicker`** target-branch pill, plus the
   **List | Tree** toggle (`store.changesView`, app-wide) switching a flat list and a folder
-  **`ChangesTree`**; clicking a file in either opens/focuses its **center resource diff tab**, and every file
+  **`ChangesTree`**, plus — left of that toggle, gated on `WALKTHROUGH_PROTOCOL_VERSION` — the **"Walk me
+  through it" control**: idle it is a start button (hidden while the scope has no changes), generating it
+  shows a disabled spinner, and with a walkthrough installed it shows `activeIndex+1/steps` progress plus an
+  end-walkthrough × (`clearWalkthrough`) **and a Previous/Next stepper** — the card footer's equivalent
+  that works even when the active card itself cannot render (a whitespace-only hunk under
+  ignore-whitespace, collapsed context), the accepted recovery for server-anchored steps the current
+  render hides. The flow lives in **`walkthrough.ts`**: `startWalkthrough`
+  fingerprints the scope's `git.status` **before** calling `walkthrough.generate` — with a raised
+  **120s request timeout**, fitting the host's 90s model budget the 60s transport default does not — (diff movement during
+  generation then invalidates rather than certifies the tour), installs through the store's generation
+  fence, then — because a mid-generation move fires its status reload before anything is installed —
+  re-reads the status once post-install and replays `reconcileWalkthrough`, jumping to step 1 only when its
+  own generation is still current and the tour survived that verification (a cleared tour raises an
+  informational toast instead); `goToWalkthroughStep` clamps the
+  index and opens that step's diff tab in preview. `ChangesPanel`'s status loads feed
+  `reconcileWalkthrough`, the invalidate-everything staleness hook. While a walkthrough is installed and
+  its `scopeKey` matches the panel's scope, the file list's active-row highlight follows the active step's
+  file (tour position beats the active-tab/`highlighted` fallbacks — tab activation can legitimately lag or
+  skip during preview navigation). `DiffPane` projects the store
+  walkthrough into the renderer prop: only when the walkthrough's `scopeKey` matches the tab's scope, it
+  maps this file's steps to `WalkthroughCardStep`s (global indices, 0-based above-the-hunk anchor line,
+  additions side unless the hunk is a pure deletion) and wires `onStep` → `goToWalkthroughStep`.
+  `PierreDiff` renders them through a fourth annotation kind, `walkthrough`, alongside
+  thread/composer/hunk; the presentational **`WalkthroughCard`** shows the active step as a full card
+  (title + "Step i of n", body, Previous | Next footer, `scrollIntoView` on activation) and every other
+  step in the file as a collapsed title-only marker that activates on click; clicking a file in either opens/focuses its **center resource diff tab**, and every file
   row carries the shared **`ChangeRowActions`** menu. The row wrapper paints the complete hover/selected
   band, including the trailing menu slot; its inner open-file button remains transparent so that band
   cannot look clipped before the menu),
@@ -1641,6 +1666,18 @@ own section. The kebab menu (`plan-menu`, a
   messaging and Unicode highlighting); keeping word highlighting preserves F7. The TS/JS/JSON/CSS/HTML
   language-service contributions and their workers are absent, so this viewer emits no language-service
   diagnostics by construction.
+- **Runtime metrics annotate the desktop file editor, desktop-only.** `MonacoEditor` carries the
+  inline-metrics layer from [[submodule-server-metrics]]: `useFileMetrics(workspaceId, path)` reads
+  `metrics.forFile` on mount and refetches on the store's `metricsByWorkspace` tick (the folded,
+  host-throttled `metrics.updated` push — hydrate-then-stream), and the pure
+  `metricsDecorations.ts` builder turns annotations into one decoration per in-buffer line: an
+  end-of-line injected `after` hint (`· 1.2k calls · p95 48 ms · 3 err`, `.metrics-inline-hint`) plus a
+  gutter heat tint (`.metrics-heat-warm|hot` on the feedback ramp) relative to the file's own hottest
+  location (p95 × calls). Line anchors are version-true to the running build, not edit-true — shifted
+  lines until the app restarts are accepted v1 behavior. `FilePane`'s toolbar shows a **Metrics**
+  `ToggleSegment` (desktop `thinkrail/code` renderer only, and only once the workspace has ever
+  received a batch) that flips the store's frontend-local `metricsLayerVisible`; phone code surfaces
+  (Pierre) have no metrics UI in v1.
 - **Code surfaces re-theme from generic tokens, resiliently.** `MonacoEditor` has the sole `EDITOR_THEME`.
   Themes own one TextMate scope definition: chat uses its live CSS-variable form, while Monaco resolves that
   same definition plus its complete editor/widget/menu/input colour map to hex, loads it into a dedicated

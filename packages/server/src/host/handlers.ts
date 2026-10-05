@@ -121,6 +121,7 @@ import {
 import { githubAuthStatus, githubRefresh } from "../github";
 import { clampLimit, getHistoryIndex } from "../history";
 import { logger } from "../log";
+import { fileAnnotations, metricsSummary } from "../metrics";
 import { openPr, previewPr } from "../pr";
 import {
 	acknowledgeProjectSkills,
@@ -236,6 +237,7 @@ import {
 	markClientStale,
 	releaseItemFix,
 } from "./todoReview";
+import { generateWalkthrough, type WalkthroughParams } from "./walkthrough";
 
 const log = logger("host");
 
@@ -538,6 +540,16 @@ const handlers: Record<string, Handler> = {
 		void ensureWatch(p.workspaceId);
 		return readFile(p.workspaceId, p.path);
 	},
+	"metrics.summary": (params) => {
+		const p = params as { workspaceId: string };
+		getWorkspace(p.workspaceId);
+		return metricsSummary(p.workspaceId);
+	},
+	"metrics.forFile": (params) => {
+		const p = params as { workspaceId: string; path: string };
+		getWorkspace(p.workspaceId);
+		return { annotations: fileAnnotations(p.workspaceId, p.path) };
+	},
 	"spec.graph": (params) => {
 		const p = params as { workspaceId: string };
 		void ensureWatch(p.workspaceId);
@@ -677,6 +689,7 @@ const handlers: Record<string, Handler> = {
 		return gitDiffFile(p.workspaceId, p.path, p.scope);
 	},
 	"git.listCommits": (params) => listCommits((params as { workspaceId: string }).workspaceId),
+	"walkthrough.generate": (params) => generateWalkthrough(params as WalkthroughParams),
 	"change.revert": (params) => {
 		const p = params as RevertChangeParams;
 		void ensureWatch(p.workspaceId);

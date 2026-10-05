@@ -12,6 +12,7 @@ import {
 	isBackgroundCommandCompletionMessage,
 	isTodoReviewFixMessage,
 	JBCENTRAL_QUOTA_PROTOCOL_VERSION,
+	METRICS_PROTOCOL_VERSION,
 	normalizeSessionTitle,
 	PLAN_REVIEW_SUBAGENT_PROTOCOL_VERSION,
 	PLAN_SUMMARY_GENERATION_PROTOCOL_VERSION,
@@ -25,6 +26,7 @@ import {
 	SUBAGENT_SETTINGS_PROTOCOL_VERSION,
 	THEME_SYSTEM_PROTOCOL_VERSION,
 	TODO_REVIEW_FIX_CUSTOM_TYPE,
+	WALKTHROUGH_PROTOCOL_VERSION,
 	WINDOWS_SHELL_SETTINGS_PROTOCOL_VERSION,
 	WS_CHANNELS,
 	WS_METHODS,
@@ -153,11 +155,25 @@ test("the eval lifecycle ships its surface at v79 (condition knobs, capabilities
 	expect(WS_CHANNELS.evalUpdate).toBe("eval.update");
 });
 
+test("walkthrough generation ships its method at v76", () => {
+	expect(WALKTHROUGH_PROTOCOL_VERSION).toBe(76);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(WALKTHROUGH_PROTOCOL_VERSION);
+	expect(WS_METHODS.walkthroughGenerate).toBe("walkthrough.generate");
+});
+
 test("resource metadata rides the two content reads from v75", () => {
 	expect(RESOURCE_META_PROTOCOL_VERSION).toBe(75);
 	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(RESOURCE_META_PROTOCOL_VERSION);
 	expect(WS_METHODS.fsReadFile).toBe("fs.readFile");
 	expect(WS_METHODS.gitDiffFile).toBe("git.diffFile");
+});
+
+test("runtime metrics introduce their reads and push at v76", () => {
+	expect(METRICS_PROTOCOL_VERSION).toBe(76);
+	expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(METRICS_PROTOCOL_VERSION);
+	expect(WS_METHODS.metricsSummary).toBe("metrics.summary");
+	expect(WS_METHODS.metricsForFile).toBe("metrics.forFile");
+	expect(WS_CHANNELS.metricsUpdated).toBe("metrics.updated");
 });
 
 describe("isTodoReviewFixMessage", () => {

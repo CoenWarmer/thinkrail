@@ -23,6 +23,8 @@ import type {
 	JbcentralLoginResult,
 	JbcentralQuotaSnapshot,
 	LoginReply,
+	MetricsFileAnnotation,
+	MetricsSummary,
 	OpenBranchReview,
 	OpenPrResult,
 	PrDraft,
@@ -47,6 +49,7 @@ import type {
 	TodoItem,
 	TodoPlan,
 	TodoStatus,
+	WalkthroughStep,
 	Workspace,
 } from "./domain";
 import { isDelegationRunDetails } from "./domain";
@@ -112,6 +115,8 @@ export type TemplateReadLocation =
 
 export const PROTOCOL_VERSION = 79;
 export const EVALS_PROTOCOL_VERSION = 79;
+export const WALKTHROUGH_PROTOCOL_VERSION = 76;
+export const METRICS_PROTOCOL_VERSION = 76;
 export const CHANGE_MUTATIONS_PROTOCOL_VERSION = 75;
 export const RESOURCE_META_PROTOCOL_VERSION = 75;
 export const REVIEW_RICH_ANCHORS_PROTOCOL_VERSION = 74;
@@ -221,6 +226,7 @@ export const WS_METHODS = {
 	todoGenerateSummary: "todo.generateSummary",
 	gitStatus: "git.status",
 	gitDiffFile: "git.diffFile",
+	walkthroughGenerate: "walkthrough.generate",
 	gitListCommits: "git.listCommits",
 	changeRevert: "change.revert",
 	changeUndo: "change.undo",
@@ -300,6 +306,8 @@ export const WS_METHODS = {
 	evalTrialMessages: "eval.trialMessages",
 	evalCapabilities: "eval.capabilities",
 	evalDeleteExperiment: "eval.deleteExperiment",
+	metricsSummary: "metrics.summary",
+	metricsForFile: "metrics.forFile",
 	templateList: "template.list",
 	templateGet: "template.get",
 	templateSave: "template.save",
@@ -331,6 +339,7 @@ export const WS_CHANNELS = {
 	reviewChanged: "review.changed",
 	reviewFailed: "review.failed",
 	evalUpdate: "eval.update",
+	metricsUpdated: "metrics.updated",
 } as const;
 
 export type WsMethod = (typeof WS_METHODS)[keyof typeof WS_METHODS];
@@ -596,6 +605,10 @@ export interface WsMethodMap {
 		};
 	};
 	"git.listCommits": { params: { workspaceId: string }; result: { commits: GitCommit[] } };
+	"walkthrough.generate": {
+		params: { workspaceId: string; scope?: GitDiffScope; sessionId?: string; paths?: string[] };
+		result: { steps: WalkthroughStep[] };
+	};
 	"change.revert": {
 		params: {
 			workspaceId: string;
@@ -841,6 +854,11 @@ export interface WsMethodMap {
 	"template.delete": {
 		params: { workspaceId?: string; scope: TemplateScope; name: string };
 		result: Ack;
+	};
+	"metrics.summary": { params: { workspaceId: string }; result: MetricsSummary };
+	"metrics.forFile": {
+		params: { workspaceId: string; path: string };
+		result: { annotations: MetricsFileAnnotation[] };
 	};
 }
 

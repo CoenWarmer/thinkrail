@@ -98,6 +98,53 @@ export interface WorkspaceFsChangedPayload {
 	skillChange: WorkspaceSkillChange;
 }
 
+/** One code location's aggregated runtime stats, as the host reports them (facts only — "receiving /
+ * stale" liveness verdicts are client view tuning). `windowed`: stats cover the host's rolling recent
+ * window; false = window empty, lifetime-since-ingest totals shown instead. `path` is
+ * workspace-relative; null = the running build reported a location outside this worktree. */
+export interface MetricsLocation {
+	path: string | null;
+	rawPath: string;
+	functionName: string;
+	line: number;
+	callCount: number;
+	errorCount: number;
+	p50Ms: number;
+	p95Ms: number;
+	maxMs: number;
+	windowed: boolean;
+}
+
+/** A `metrics.forFile` row: `MetricsLocation` minus the file identity the request already named. */
+export interface MetricsFileAnnotation {
+	line: number;
+	functionName: string;
+	callCount: number;
+	errorCount: number;
+	p50Ms: number;
+	p95Ms: number;
+	maxMs: number;
+	windowed: boolean;
+}
+
+/** The workspace's ingest status + hottest locations. `ingestPath` is host-relative (the client
+ * composes the full URL against its own transport endpoint — the host does not know its external
+ * hostname); `lastReceivedAt` null = no OTLP batch has ever arrived for this workspace. */
+export interface MetricsSummary {
+	lastReceivedAt: number | null;
+	services: string[];
+	totalSpans: number;
+	locationCount: number;
+	ingestPath: string;
+	topLocations: MetricsLocation[];
+}
+
+/** The throttled `metrics.updated` push: workspace-relative paths whose aggregates changed. */
+export interface MetricsUpdatedPayload {
+	workspaceId: string;
+	paths: string[];
+}
+
 export type FileKind = "file" | "dir";
 
 export interface FileNode {
@@ -339,6 +386,14 @@ export interface GitCommit {
 export interface LineSpan {
 	start: number;
 	count: number;
+}
+
+export interface WalkthroughStep {
+	path: string;
+	original: LineSpan;
+	modified: LineSpan;
+	title: string;
+	body: string;
 }
 
 export type RevertTarget =

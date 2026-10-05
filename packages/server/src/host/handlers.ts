@@ -98,6 +98,7 @@ import { selectDirectory } from "../dialog";
 import { listAvailableEditors, openEditor, revealInFileManager } from "../editors";
 import {
 	currentRunState as currentEvalRunState,
+	deleteExperiment as deleteEvalExperiment,
 	listExperiments as listEvalExperiments,
 	listFixtures as listEvalFixtures,
 	listTrials as listEvalTrials,
@@ -202,7 +203,12 @@ import {
 } from "../workspaces";
 import { ackSend } from "./ackSend";
 import { sessionProviderAnalytics, trackChatStarted } from "./authAnalytics";
-import { assertRunnableCondition, trialSessionFactory } from "./evalsRunner";
+import {
+	assertConditionCapabilities,
+	assertRunnableCondition,
+	evalCapabilities,
+	trialSessionFactory,
+} from "./evalsRunner";
 import { nudgeBaseRefWorkspaces } from "./fsNudge";
 import { buildHistoryScope } from "./historyScope";
 import { provisionInitialTerminal } from "./initialTerminal";
@@ -1221,12 +1227,29 @@ const handlers: Record<string, Handler> = {
 			}),
 		};
 	},
-	"eval.saveExperiment": (params) => {
+	"eval.saveExperiment": async (params) => {
 		const p = params as { workspaceId: string; experiment: EvalExperiment };
-		for (const condition of p.experiment.conditions) assertRunnableCondition(condition);
+		const ws = getWorkspace(p.workspaceId);
+		const needsCatalog = p.experiment.conditions.some((c) => c.tools || c.skills || c.extensions);
+		const capabilities = needsCatalog ? await evalCapabilities(ws.worktreePath) : null;
+		for (const condition of p.experiment.conditions) {
+			assertRunnableCondition(condition);
+			if (capabilities) assertConditionCapabilities(condition, capabilities);
+		}
 		return {
-			experiment: saveEvalExperiment(getWorkspace(p.workspaceId).projectId, p.experiment),
+			experiment: saveEvalExperiment(ws.projectId, p.experiment),
 		};
+	},
+	"eval.capabilities": (params) => {
+		const p = params as { workspaceId: string };
+		return evalCapabilities(getWorkspace(p.workspaceId).worktreePath);
+	},
+	"eval.deleteExperiment": (params) => {
+		const p = params as { workspaceId: string; experimentId: string };
+		if (currentEvalRunState()?.experimentId === p.experimentId)
+			throw new Error(`Experiment ${p.experimentId} is running — stop the run first.`);
+		deleteEvalExperiment(getWorkspace(p.workspaceId).projectId, p.experimentId);
+		return { ok: true as const };
 	},
 	"eval.run": (params) => {
 		const p = params as {

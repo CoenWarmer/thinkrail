@@ -8,6 +8,7 @@ import {
 	type CreateAgentSessionOptions,
 	createAgentSession,
 	type ExtensionError,
+	type ExtensionFactory,
 	getAgentDir,
 	type SessionInfo,
 	SessionManager,
@@ -76,7 +77,11 @@ import {
 } from "./askUserQuestion";
 import { publishSessionResourcesChanged } from "./chatResources";
 import { disposeSessionChildren, removeWorkspaceDelegation, subagentsFor } from "./delegation";
-import { buildResourceLoader, toSkillCommands } from "./extensions";
+import {
+	buildResourceLoader,
+	type SessionCapabilityOverrides,
+	toSkillCommands,
+} from "./extensions";
 import {
 	getPiRuntime,
 	getPiRuntimeGeneration,
@@ -126,6 +131,7 @@ interface Entry {
 	subagentToolsRefreshPending: boolean;
 	reviewToolRefreshPending: boolean;
 	nudgePromptPending: boolean;
+	toolAllowlist: ReadonlySet<string> | null;
 	lastPublishedState: string | null;
 	askUserQuestionWaiters: AskUserQuestionWaiters;
 }
@@ -522,13 +528,18 @@ function isSubagentTool(name: string): boolean {
 	return RECURSION_GUARD_TOOLS.some((toolName) => toolName === name);
 }
 
+function allowedTools(entry: Entry, names: readonly string[]): string[] {
+	const allowlist = entry.toolAllowlist;
+	return allowlist === null ? [...names] : names.filter((name) => allowlist.has(name));
+}
+
 function applySubagentTools(entry: Entry): void {
 	const withoutSubagents = entry.session
 		.getActiveToolNames()
 		.filter((name) => !isSubagentTool(name));
 	entry.session.setActiveToolsByName(
 		subagentsEnabled(entry.workspaceId)
-			? [...withoutSubagents, ...RECURSION_GUARD_TOOLS]
+			? [...withoutSubagents, ...allowedTools(entry, RECURSION_GUARD_TOOLS)]
 			: withoutSubagents,
 	);
 	entry.subagentToolsRefreshPending = false;
@@ -565,7 +576,7 @@ function applyReviewTool(entry: Entry): void {
 		.filter((name) => name !== REQUEST_REVIEW_TOOL_NAME);
 	entry.session.setActiveToolsByName(
 		agentReviewEnabled(entry.workspaceId)
-			? [...withoutReview, REQUEST_REVIEW_TOOL_NAME]
+			? [...withoutReview, ...allowedTools(entry, [REQUEST_REVIEW_TOOL_NAME])]
 			: withoutReview,
 	);
 	entry.reviewToolRefreshPending = false;
@@ -645,6 +656,13 @@ export interface CreateSessionInput {
 	thinkingLevel?: ThinkingLevel;
 	/** True: an unresolvable `model` falls back to the default instead of throwing. */
 	modelOptional?: boolean;
+	/** Eval-trial capability treatments; see agent/SPEC.md. Host-set only. */
+	capabilityOverrides?: SessionCapabilityOverrides & {
+		/** Allowlist of active tool names; additions outside it (subagents, review) stay off. */
+		tools?: readonly string[];
+		/** Literal text appended to the system prompt on every agent start. */
+		systemPromptSuffix?: string;
+	};
 }
 
 export interface CreateSessionResult {
@@ -710,6 +728,7 @@ async function prepareSessionEntry(
 		subagentToolsRefreshPending: false,
 		reviewToolRefreshPending: false,
 		nudgePromptPending: false,
+		toolAllowlist: null,
 		lastPublishedState: null,
 		askUserQuestionWaiters,
 	};
@@ -848,6 +867,7 @@ async function registerSession(
 	askUserQuestionWaiters: AskUserQuestionWaiters,
 	lifecycleToken: WorkspaceLifecycleToken,
 	announceCreation = false,
+	toolAllowlist: ReadonlySet<string> | null = null,
 ): Promise<CreateSessionResult> {
 	const prepared = await prepareSessionEntry(
 		session,
@@ -863,6 +883,7 @@ async function registerSession(
 	)
 		throw new Error(`Workspace is unavailable: ${workspaceId}`);
 	prepared.entry.registered = true;
+	prepared.entry.toolAllowlist = toolAllowlist;
 	sessions.set(session.sessionId, prepared.entry);
 	applySubagentTools(prepared.entry);
 	applyReviewTool(prepared.entry);
@@ -895,6 +916,8 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
 			settingsManager,
 			...(model ? { model } : {}),
 			...(input.thinkingLevel ? { thinkingLevel: input.thinkingLevel } : {}),
+			...(input.capabilityOverrides?.tools ? { tools: [...input.capabilityOverrides.tools] } : {}),
+			...(input.capabilityOverrides ? { capabilityOverrides: input.capabilityOverrides } : {}),
 		},
 		input.workspaceId,
 		generation,
@@ -907,6 +930,7 @@ type ParentSessionOptions = CreateAgentSessionOptions & {
 	cwd: string;
 	sessionManager: SessionManager;
 	settingsManager: SettingsManager;
+	capabilityOverrides?: CreateSessionInput["capabilityOverrides"];
 };
 
 function createParentSession(
@@ -960,16 +984,37 @@ async function createParentSessionInternal(
 			sessions.get(sessionId)?.commands === commands && canDeliverCompletion(),
 	});
 	try {
+		const { capabilityOverrides, ...agentOptions } = options;
+		const suffix = capabilityOverrides?.systemPromptSuffix;
+		const suffixFactory: ExtensionFactory[] = suffix
+			? [
+					(pi) => {
+						pi.on("before_agent_start", (event) => {
+							event.systemPromptOptions.appendSystemPrompt = [
+								event.systemPromptOptions.appendSystemPrompt,
+								suffix,
+							]
+								.filter(Boolean)
+								.join("\n\n");
+						});
+					},
+				]
+			: [];
 		const result = await createAgentSession({
-			...options,
+			...agentOptions,
 			modelRuntime: generation.runtime,
 			resourceLoader: await buildResourceLoader(
 				cwd,
 				settingsManager,
 				() => skillAdmissionResolver(workspaceId),
 				generation.excludedSessionExtensionPaths,
-				[subagents.extension, createBackgroundCommandsExtension({ service: commands })],
+				[
+					subagents.extension,
+					createBackgroundCommandsExtension({ service: commands }),
+					...suffixFactory,
+				],
 				askUserQuestionWaiters,
+				capabilityOverrides,
 			),
 		});
 		session = result.session;
@@ -982,6 +1027,7 @@ async function createParentSessionInternal(
 			askUserQuestionWaiters,
 			lifecycleToken,
 			announceCreation,
+			capabilityOverrides?.tools ? new Set(capabilityOverrides.tools) : null,
 		);
 	} catch (error) {
 		if (sessions.get(sessionId)?.commands === commands) {

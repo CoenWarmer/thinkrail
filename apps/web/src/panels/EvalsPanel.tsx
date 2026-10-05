@@ -1,13 +1,13 @@
 import type {
-	EvalBudget,
+	EvalCapabilities,
+	EvalCapabilityEntry,
 	EvalCondition,
 	EvalExperiment,
 	EvalTrialRecord,
 	SessionSummary,
-	TranscriptMessage,
 } from "@thinkrail/contracts";
 import { EVALS_PROTOCOL_VERSION } from "@thinkrail/contracts";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -16,13 +16,21 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Markdown } from "../chat/Markdown";
-import { selectEvalConditionAggregates, selectWorkspaceById, useAppStore } from "../store";
+import { aggregateEvalTrials, selectWorkspaceById, useAppStore } from "../store";
 import { getTransport } from "../transport";
 import { ConfirmDialog } from "./ConfirmDialog";
-
-const FIELD =
-	"h-28 w-full rounded-[var(--radius-sm)] border border-control-border-default bg-control-bg px-8 tr-text-ui text-text-default outline-none focus-visible:border-control-border-active";
+import {
+	ConditionAggregatesTable,
+	describeBudget,
+	describeCondition,
+	ExperimentCompare,
+	EVAL_FIELD as FIELD,
+	type TrialRef,
+	TrialTranscript,
+	toTrialRef,
+	totalTrialsOf,
+} from "./evalsShared";
+import { openEvalResults } from "./openEvalResults";
 
 export function EvalsPanel({
 	workspaceId,
@@ -39,6 +47,14 @@ export function EvalsPanel({
 	const evals = useAppStore((s) => (projectId ? s.evalsByProject[projectId] : undefined));
 	const run = useAppStore((s) => s.evalRun);
 	const pushToast = useAppStore((s) => s.pushToast);
+	const fail = useCallback(
+		(err: unknown) =>
+			pushToast({
+				variant: "error",
+				message: err instanceof Error ? err.message : String(err),
+			}),
+		[pushToast],
+	);
 
 	if (protocolVersion !== null && protocolVersion < EVALS_PROTOCOL_VERSION) {
 		return (
@@ -47,9 +63,6 @@ export function EvalsPanel({
 			</div>
 		);
 	}
-
-	const fail = (err: unknown) =>
-		pushToast({ variant: "error", message: err instanceof Error ? err.message : String(err) });
 
 	return (
 		<div className="flex min-h-0 flex-col gap-12" data-testid="evals-panel">
@@ -157,7 +170,9 @@ function FixtureSection({
 		setPickerOpen(true);
 		setSessions(null);
 		try {
-			const result = await getTransport().request("session.list", { workspaceId });
+			const result = await getTransport().request("session.list", {
+				workspaceId,
+			});
 			setSessions(result);
 		} catch (err) {
 			setPickerOpen(false);
@@ -213,6 +228,7 @@ function FixtureSection({
 								<li key={session.sessionId}>
 									<button
 										type="button"
+										data-testid="eval-promote-session"
 										className="w-full rounded-[var(--radius-sm)] border border-control-border-default bg-control-bg px-8 py-4 text-left tr-text-metadata hover:border-control-border-active"
 										onClick={() => promote(session.sessionId)}
 									>
@@ -244,6 +260,7 @@ function ExperimentSection({
 	onError: (err: unknown) => void;
 }) {
 	const [composerOpen, setComposerOpen] = useState(false);
+	const [editing, setEditing] = useState<EvalExperiment | null>(null);
 	return (
 		<section>
 			<header className="flex items-center justify-between px-4 py-4">
@@ -252,7 +269,10 @@ function ExperimentSection({
 					variant="outline"
 					size="sm"
 					disabled={fixtures.length === 0}
-					onClick={() => setComposerOpen(true)}
+					onClick={() => {
+						setEditing(null);
+						setComposerOpen(true);
+					}}
 					data-testid="eval-composer-open"
 				>
 					New experiment…
@@ -268,6 +288,11 @@ function ExperimentSection({
 							workspaceId={workspaceId}
 							experiment={experiment}
 							runActive={runActive}
+							onEdit={() => {
+								setEditing(experiment);
+								setComposerOpen(true);
+							}}
+							onChanged={onChanged}
 							onError={onError}
 						/>
 					))}
@@ -275,11 +300,16 @@ function ExperimentSection({
 			)}
 			<ExperimentComposer
 				open={composerOpen}
-				onOpenChange={setComposerOpen}
+				onOpenChange={(open) => {
+					setComposerOpen(open);
+					if (!open) setEditing(null);
+				}}
 				workspaceId={workspaceId}
 				fixtures={fixtures}
+				initial={editing}
 				onSaved={() => {
 					setComposerOpen(false);
+					setEditing(null);
 					onChanged();
 				}}
 				onError={onError}
@@ -288,36 +318,28 @@ function ExperimentSection({
 	);
 }
 
-function totalTrialsOf(experiment: EvalExperiment): number {
-	return experiment.conditions.length * experiment.trialsPerCondition;
-}
-
-function describeBudget(budget: EvalBudget): string {
-	const parts: string[] = [];
-	if (budget.maxTurns !== undefined) parts.push(`${budget.maxTurns} turns`);
-	if (budget.maxToolCalls !== undefined) parts.push(`${budget.maxToolCalls} tool calls`);
-	if (budget.maxWallMs !== undefined) parts.push(`${Math.round(budget.maxWallMs / 1000)}s wall`);
-	if (budget.maxCostUsd !== undefined) parts.push(`$${budget.maxCostUsd} cost`);
-	return parts.length > 0 ? parts.join(", ") : "no per-trial caps";
-}
-
 function ExperimentRow({
 	workspaceId,
 	experiment,
 	runActive,
+	onEdit,
+	onChanged,
 	onError,
 }: {
 	workspaceId: string;
 	experiment: EvalExperiment;
 	runActive: boolean;
+	onEdit: () => void;
+	onChanged: () => void;
 	onError: (err: unknown) => void;
 }) {
 	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [deleteOpen, setDeleteOpen] = useState(false);
 	const [expanded, setExpanded] = useState(false);
-	const aggregates = useAppStore((s) => selectEvalConditionAggregates(s, experiment.id));
 	const setEvalTrials = useAppStore((s) => s.setEvalTrials);
 
 	const trials = useAppStore((s) => s.evalTrialsByExperiment[experiment.id]);
+	const aggregates = useMemo(() => aggregateEvalTrials(trials ?? []), [trials]);
 	const [inspecting, setInspecting] = useState<EvalTrialRecord | null>(null);
 	const [comparing, setComparing] = useState(false);
 
@@ -350,6 +372,7 @@ function ExperimentRow({
 					totalTrials: totalTrialsOf(experiment),
 				},
 			});
+			openEvalResults(workspaceId, experiment.id);
 		} catch (err) {
 			onError(err);
 		}
@@ -362,18 +385,46 @@ function ExperimentRow({
 					<strong>{experiment.id}</strong>
 					<span className="text-text-muted">
 						{" "}
-						— {experiment.conditions.length} condition
-						{experiment.conditions.length === 1 ? "" : "s"} × {experiment.trialsPerCondition}
+						— {experiment.conditions.map(describeCondition).join(" · ")} ×{" "}
+						{experiment.trialsPerCondition}
 					</span>
 				</button>
-				<Button
-					size="sm"
-					disabled={runActive}
-					onClick={() => setConfirmOpen(true)}
-					data-testid={`eval-run-${experiment.id}`}
-				>
-					Run…
-				</Button>
+				<div className="flex items-center gap-4">
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => openEvalResults(workspaceId, experiment.id)}
+						data-testid={`eval-results-${experiment.id}`}
+					>
+						Results
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={runActive}
+						onClick={onEdit}
+						data-testid={`eval-edit-${experiment.id}`}
+					>
+						Edit
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={runActive}
+						onClick={() => setDeleteOpen(true)}
+						data-testid={`eval-delete-${experiment.id}`}
+					>
+						Delete
+					</Button>
+					<Button
+						size="sm"
+						disabled={runActive}
+						onClick={() => setConfirmOpen(true)}
+						data-testid={`eval-run-${experiment.id}`}
+					>
+						Run…
+					</Button>
+				</div>
 			</div>
 			{expanded ? (
 				<div className="pt-8 tr-text-metadata">
@@ -389,32 +440,7 @@ function ExperimentRow({
 							</Button>
 						</div>
 					) : null}
-					{aggregates.length === 0 ? (
-						<div className="text-text-muted">No trials recorded yet.</div>
-					) : (
-						<table className="w-full">
-							<thead>
-								<tr className="text-left text-text-muted">
-									<th>condition</th>
-									<th>trials</th>
-									<th>pass</th>
-									<th>avg cost</th>
-									<th>avg turns</th>
-								</tr>
-							</thead>
-							<tbody>
-								{aggregates.map((row) => (
-									<tr key={row.conditionId}>
-										<td>{row.conditionId}</td>
-										<td>{row.trials}</td>
-										<td>{row.passRate === null ? "—" : `${Math.round(row.passRate * 100)}%`}</td>
-										<td>{row.avgCostUsd === null ? "—" : `$${row.avgCostUsd.toFixed(4)}`}</td>
-										<td>{row.avgTurns === null ? "—" : Math.round(row.avgTurns * 10) / 10}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					)}
+					<ConditionAggregatesTable aggregates={aggregates} />
 					{(trials ?? []).length > 0 ? (
 						<ul className="flex flex-col pt-4">
 							{(trials ?? []).map((trial) => (
@@ -443,12 +469,30 @@ function ExperimentRow({
 			) : null}
 			{comparing ? (
 				<CompareDialog
-					experimentId={experiment.id}
-					trials={trials ?? []}
+					experiment={experiment}
 					onClose={() => setComparing(false)}
 					onError={onError}
 				/>
 			) : null}
+			<ConfirmDialog
+				open={deleteOpen}
+				onOpenChange={setDeleteOpen}
+				title={`Delete ${experiment.id}?`}
+				description="The experiment definition is removed. Recorded trials stay in the trial history."
+				confirmLabel="Delete"
+				onConfirm={async () => {
+					setDeleteOpen(false);
+					try {
+						await getTransport().request("eval.deleteExperiment", {
+							workspaceId,
+							experimentId: experiment.id,
+						});
+						onChanged();
+					} catch (err) {
+						onError(err);
+					}
+				}}
+			/>
 			<ConfirmDialog
 				open={confirmOpen}
 				onOpenChange={setConfirmOpen}
@@ -461,11 +505,267 @@ function ExperimentRow({
 	);
 }
 
+const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+const SPEC_GRAPH_SKILL = "spec-graph";
+
+let draftCounter = 0;
+
+interface ConditionDraft {
+	key: string;
+	id: string;
+	model: string;
+	thinkingLevel: string;
+	promptVariant: string;
+	specsAvailable: boolean;
+	/** null = inherit the session default (everything). */
+	tools: string[] | null;
+	skills: string[] | null;
+	extensions: string[] | null;
+}
+
+function emptyDraft(id: string): ConditionDraft {
+	return {
+		key: `draft-${++draftCounter}`,
+		id,
+		model: "",
+		thinkingLevel: "",
+		promptVariant: "",
+		specsAvailable: true,
+		tools: null,
+		skills: null,
+		extensions: null,
+	};
+}
+
+function toCondition(draft: ConditionDraft): EvalCondition {
+	return {
+		id: draft.id.trim(),
+		...(draft.model.trim() ? { model: draft.model.trim() } : {}),
+		...(draft.thinkingLevel ? { thinkingLevel: draft.thinkingLevel } : {}),
+		...(draft.promptVariant.trim() ? { promptVariant: draft.promptVariant } : {}),
+		...(draft.specsAvailable ? {} : { specsAvailable: false }),
+		...(draft.tools ? { tools: draft.tools } : {}),
+		...(draft.skills ? { skills: draft.skills } : {}),
+		...(draft.extensions ? { extensions: draft.extensions } : {}),
+	};
+}
+
+function CapabilityChecklist({
+	label,
+	entries,
+	value,
+	onChange,
+	testId,
+}: {
+	label: string;
+	entries: EvalCapabilityEntry[];
+	value: string[] | null;
+	onChange: (next: string[] | null) => void;
+	testId: string;
+}) {
+	const customized = value !== null;
+	const checked = new Set(value ?? entries.map((entry) => entry.id));
+	return (
+		<div className="flex flex-col gap-2">
+			<label className="flex items-center gap-4">
+				<input
+					type="checkbox"
+					checked={customized}
+					onChange={(e) => onChange(e.target.checked ? entries.map((entry) => entry.id) : null)}
+					data-testid={`${testId}-customize`}
+				/>
+				<span>
+					{label} {customized ? `(${checked.size}/${entries.length})` : "(inherit all)"}
+				</span>
+			</label>
+			{customized ? (
+				<ul className="flex max-h-[9rem] flex-col gap-2 overflow-y-auto pl-12">
+					{entries.map((entry) => (
+						<li key={entry.id}>
+							<label className="flex items-center gap-4" title={entry.description ?? ""}>
+								<input
+									type="checkbox"
+									checked={checked.has(entry.id)}
+									onChange={(e) => {
+										const next = new Set(checked);
+										if (e.target.checked) next.add(entry.id);
+										else next.delete(entry.id);
+										onChange(entries.map((c) => c.id).filter((id) => next.has(id)));
+									}}
+									data-testid={`${testId}-${entry.id}`}
+								/>
+								<span className="truncate">{entry.id}</span>
+							</label>
+						</li>
+					))}
+				</ul>
+			) : null}
+		</div>
+	);
+}
+
+function ConditionEditor({
+	draft,
+	capabilities,
+	modelOptions,
+	removable,
+	onChange,
+	onRemove,
+	index,
+}: {
+	draft: ConditionDraft;
+	capabilities: EvalCapabilities | null;
+	modelOptions: string[];
+	removable: boolean;
+	onChange: (next: ConditionDraft) => void;
+	onRemove: () => void;
+	index: number;
+}) {
+	const set = (patch: Partial<ConditionDraft>) => onChange({ ...draft, ...patch });
+	const knownModel = draft.model === "" || modelOptions.includes(draft.model);
+	return (
+		<div
+			className="flex flex-col gap-8 rounded-[var(--radius-sm)] border border-control-border-default px-8 py-8"
+			data-testid={`eval-condition-${index}`}
+		>
+			<div className="flex items-center gap-8">
+				<input
+					className={FIELD}
+					value={draft.id}
+					onChange={(e) => set({ id: e.target.value })}
+					placeholder="condition name"
+					data-testid={`eval-condition-${index}-id`}
+				/>
+				{removable ? (
+					<Button variant="outline" size="sm" onClick={onRemove}>
+						Remove
+					</Button>
+				) : null}
+			</div>
+			<div className="flex gap-8">
+				{modelOptions.length > 0 ? (
+					<label className="flex flex-1 flex-col gap-2">
+						Model
+						<select
+							className={FIELD}
+							value={draft.model}
+							onChange={(e) => set({ model: e.target.value })}
+							data-testid={`eval-condition-${index}-model`}
+						>
+							<option value="">baseline</option>
+							{knownModel ? null : <option value={draft.model}>{draft.model} (unavailable)</option>}
+							{modelOptions.map((model) => (
+								<option key={model} value={model}>
+									{model}
+								</option>
+							))}
+						</select>
+					</label>
+				) : (
+					<label className="flex flex-1 flex-col gap-2">
+						Model
+						<input
+							className={FIELD}
+							value={draft.model}
+							onChange={(e) => set({ model: e.target.value })}
+							placeholder="provider/id (empty = baseline)"
+						/>
+					</label>
+				)}
+				<label className="flex flex-1 flex-col gap-2">
+					Thinking level
+					<select
+						className={FIELD}
+						value={draft.thinkingLevel}
+						onChange={(e) => set({ thinkingLevel: e.target.value })}
+					>
+						<option value="">baseline</option>
+						{THINKING_LEVELS.map((level) => (
+							<option key={level} value={level}>
+								{level}
+							</option>
+						))}
+					</select>
+				</label>
+			</div>
+			<label className="flex flex-col gap-2">
+				System prompt suffix (empty = none)
+				<textarea
+					className={`${FIELD} h-56 py-4`}
+					value={draft.promptVariant}
+					onChange={(e) => set({ promptVariant: e.target.value })}
+					data-testid={`eval-condition-${index}-prompt`}
+				/>
+			</label>
+			<label className="flex items-center gap-4">
+				<input
+					type="checkbox"
+					checked={draft.specsAvailable}
+					onChange={(e) => {
+						const specsAvailable = e.target.checked;
+						set({
+							specsAvailable,
+							...(!specsAvailable && draft.skills
+								? {
+										skills: draft.skills.filter((name) => name !== SPEC_GRAPH_SKILL),
+									}
+								: {}),
+						});
+					}}
+					data-testid={`eval-condition-${index}-specs`}
+				/>
+				<span>Specs available (spec tools + guidance)</span>
+			</label>
+			{capabilities ? (
+				<>
+					<CapabilityChecklist
+						label="Tools"
+						entries={capabilities.tools}
+						value={draft.tools}
+						onChange={(tools) => set({ tools })}
+						testId={`eval-condition-${index}-tools`}
+					/>
+					<CapabilityChecklist
+						label="Skills"
+						entries={capabilities.skills}
+						value={draft.skills}
+						onChange={(skills) => set({ skills })}
+						testId={`eval-condition-${index}-skills`}
+					/>
+					<CapabilityChecklist
+						label="Extensions"
+						entries={capabilities.extensions}
+						value={draft.extensions}
+						onChange={(extensions) => set({ extensions })}
+						testId={`eval-condition-${index}-extensions`}
+					/>
+				</>
+			) : (
+				<div className="text-text-muted">Loading capabilities…</div>
+			)}
+		</div>
+	);
+}
+
+function draftFromCondition(condition: EvalCondition): ConditionDraft {
+	return {
+		...emptyDraft(condition.id),
+		model: condition.model ?? "",
+		thinkingLevel: condition.thinkingLevel ?? "",
+		promptVariant: condition.promptVariant ?? "",
+		specsAvailable: condition.specsAvailable !== false,
+		tools: condition.tools ?? null,
+		skills: condition.skills ?? null,
+		extensions: condition.extensions ?? null,
+	};
+}
+
 function ExperimentComposer({
 	open,
 	onOpenChange,
 	workspaceId,
 	fixtures,
+	initial,
 	onSaved,
 	onError,
 }: {
@@ -473,6 +773,7 @@ function ExperimentComposer({
 	onOpenChange: (open: boolean) => void;
 	workspaceId: string;
 	fixtures: string[];
+	initial: EvalExperiment | null;
 	onSaved: () => void;
 	onError: (err: unknown) => void;
 }) {
@@ -481,30 +782,78 @@ function ExperimentComposer({
 	const [trials, setTrials] = useState("2");
 	const [maxTurns, setMaxTurns] = useState("20");
 	const [maxCostUsd, setMaxCostUsd] = useState("1");
-	const [variantModel, setVariantModel] = useState("");
-	const [variantThinking, setVariantThinking] = useState("");
+	const [conditions, setConditions] = useState<ConditionDraft[]>([emptyDraft("baseline")]);
+	const [capabilities, setCapabilities] = useState<EvalCapabilities | null>(null);
+	const models = useAppStore((s) => s.models);
+	const modelOptions = useMemo(
+		() => models.map((model) => `${model.provider}/${model.id}`),
+		[models],
+	);
+	const editing = initial !== null;
+
+	useEffect(() => {
+		if (!open) return;
+		if (initial) {
+			setId(initial.id);
+			setFixtureId(initial.fixtureId);
+			setTrials(String(initial.trialsPerCondition));
+			setMaxTurns(
+				initial.trialBudget.maxTurns !== undefined ? String(initial.trialBudget.maxTurns) : "",
+			);
+			setMaxCostUsd(
+				initial.trialBudget.maxCostUsd !== undefined ? String(initial.trialBudget.maxCostUsd) : "",
+			);
+			setConditions(initial.conditions.map(draftFromCondition));
+		} else {
+			setId("");
+			setFixtureId("");
+			setTrials("2");
+			setMaxTurns("20");
+			setMaxCostUsd("1");
+			setConditions([emptyDraft("baseline")]);
+		}
+	}, [open, initial]);
+
+	useEffect(() => {
+		if (!open) return;
+		let cancelled = false;
+		setCapabilities(null);
+		getTransport()
+			.request("eval.capabilities", { workspaceId })
+			.then((result) => {
+				if (!cancelled) setCapabilities(result);
+			})
+			.catch((err) => {
+				if (!cancelled) onError(err);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [open, workspaceId, onError]);
+
+	const conditionIds = conditions.map((c) => c.id.trim());
+	const conditionsValid =
+		conditionIds.every((cid) => cid !== "") && new Set(conditionIds).size === conditionIds.length;
 
 	const save = async () => {
-		const conditions: EvalCondition[] = [{ id: "baseline" }];
-		if (variantModel.trim() || variantThinking) {
-			conditions.push({
-				id: "variant",
-				...(variantModel.trim() ? { model: variantModel.trim() } : {}),
-				...(variantThinking ? { thinkingLevel: variantThinking } : {}),
-			});
-		}
 		const experiment: EvalExperiment = {
 			id: id.trim(),
 			fixtureId: fixtureId || fixtures[0] || "",
-			conditions,
+			conditions: conditions.map(toCondition),
 			trialsPerCondition: Number.parseInt(trials, 10) || 1,
 			trialBudget: {
 				...(Number.parseInt(maxTurns, 10) > 0 ? { maxTurns: Number.parseInt(maxTurns, 10) } : {}),
 				...(Number.parseFloat(maxCostUsd) > 0 ? { maxCostUsd: Number.parseFloat(maxCostUsd) } : {}),
 			},
+			...(initial?.experimentMaxCostUsd !== undefined
+				? { experimentMaxCostUsd: initial.experimentMaxCostUsd }
+				: {}),
 		};
 		try {
-			await getTransport().request("eval.saveExperiment", { workspaceId, experiment });
+			await getTransport().request("eval.saveExperiment", {
+				workspaceId,
+				experiment,
+			});
 			onSaved();
 		} catch (err) {
 			onError(err);
@@ -513,16 +862,17 @@ function ExperimentComposer({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-[26rem]">
+			<DialogContent className="max-w-[34rem]">
 				<DialogHeader>
-					<DialogTitle>New experiment</DialogTitle>
+					<DialogTitle>{editing ? `Edit ${initial?.id}` : "New experiment"}</DialogTitle>
 				</DialogHeader>
-				<div className="flex flex-col gap-8 tr-text-metadata">
+				<div className="flex max-h-[65vh] flex-col gap-8 overflow-y-auto tr-text-metadata">
 					<label className="flex flex-col gap-2">
 						Name
 						<input
 							className={FIELD}
 							value={id}
+							disabled={editing}
 							onChange={(e) => setId(e.target.value)}
 							data-testid="eval-composer-id"
 						/>
@@ -563,137 +913,46 @@ function ExperimentComposer({
 							/>
 						</label>
 					</div>
-					<label className="flex flex-col gap-2">
-						Variant model (provider/id — empty to keep the baseline model)
-						<input
-							className={FIELD}
-							value={variantModel}
-							onChange={(e) => setVariantModel(e.target.value)}
-							placeholder="openrouter/moonshotai/kimi-k2.6"
+					{conditions.map((draft, index) => (
+						<ConditionEditor
+							key={draft.key}
+							index={index}
+							draft={draft}
+							capabilities={capabilities}
+							modelOptions={modelOptions}
+							removable={conditions.length > 1}
+							onChange={(next) => setConditions(conditions.map((c, i) => (i === index ? next : c)))}
+							onRemove={() => setConditions(conditions.filter((_, i) => i !== index))}
 						/>
-					</label>
-					<label className="flex flex-col gap-2">
-						Variant thinking level (empty to keep the baseline level)
-						<select
-							className={FIELD}
-							value={variantThinking}
-							onChange={(e) => setVariantThinking(e.target.value)}
+					))}
+					<div>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() =>
+								setConditions([...conditions, emptyDraft(`variant-${conditions.length}`)])
+							}
+							data-testid="eval-composer-add-condition"
 						>
-							<option value="">baseline</option>
-							{["off", "minimal", "low", "medium", "high", "xhigh", "max"].map((level) => (
-								<option key={level} value={level}>
-									{level}
-								</option>
-							))}
-						</select>
-					</label>
+							Add condition…
+						</Button>
+					</div>
 				</div>
 				<DialogFooter>
 					<Button variant="outline" onClick={() => onOpenChange(false)}>
 						Cancel
 					</Button>
-					<Button disabled={!id.trim() || fixtures.length === 0} onClick={save}>
-						Save experiment
+					<Button
+						disabled={!id.trim() || fixtures.length === 0 || !conditionsValid}
+						onClick={save}
+						data-testid="eval-composer-save"
+					>
+						{editing ? "Save changes" : "Save experiment"}
 					</Button>
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
 	);
-}
-
-type TrialRef = {
-	experimentId: string;
-	conditionId: string;
-	trial: number;
-	sessionId: string;
-	status: string;
-	costUsd?: number | null;
-};
-
-function toTrialRef(experimentId: string, record: EvalTrialRecord): TrialRef {
-	return {
-		experimentId,
-		conditionId: record.conditionId,
-		trial: record.trial,
-		sessionId: record.sessionId,
-		status: record.status,
-		costUsd: record.event?.costUsd ?? null,
-	};
-}
-
-function TrialTranscript({ trial, onError }: { trial: TrialRef; onError: (err: unknown) => void }) {
-	const [messages, setMessages] = useState<TranscriptMessage[] | null>(null);
-	const live = useAppStore(
-		(s) => s.evalRun?.activeTrial?.sessionId === trial.sessionId && trial.sessionId !== "",
-	);
-	const liveTick = useAppStore((s) =>
-		live ? (s.evalRun?.activeTrial?.costUsd ?? 0) + (s.evalRun?.completedTrials ?? 0) : 0,
-	);
-
-	useEffect(() => {
-		let cancelled = false;
-		getTransport()
-			.request("eval.trialMessages", {
-				experimentId: trial.experimentId,
-				conditionId: trial.conditionId,
-				trial: trial.trial,
-				sessionId: trial.sessionId,
-			})
-			.then((result) => {
-				if (!cancelled) setMessages(result.messages);
-			})
-			.catch((err) => {
-				if (!cancelled) onError(err);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [trial.experimentId, trial.conditionId, trial.trial, trial.sessionId, onError, liveTick]);
-
-	if (messages === null)
-		return <div className="tr-text-metadata text-text-muted">Loading transcript…</div>;
-	return (
-		<div className="flex flex-col gap-8">
-			{live ? <div className="tr-text-metadata text-text-muted">live — updating…</div> : null}
-			{messages.map((message, index) => (
-				<TranscriptBlock key={`${index}-${message.role}`} message={message} />
-			))}
-		</div>
-	);
-}
-
-function TranscriptBlock({ message }: { message: TranscriptMessage }) {
-	if (message.role === "user" || message.role === "assistant") {
-		const text = transcriptText(message.content);
-		const tools =
-			message.role === "assistant" && Array.isArray(message.content)
-				? message.content.filter(
-						(block: { type?: string }) => (block as { type?: string }).type === "toolCall",
-					)
-				: [];
-		if (!text.trim() && tools.length === 0) return null;
-		return (
-			<div className="tr-text-metadata">
-				<div className="tr-text-eyebrow text-text-muted">{message.role}</div>
-				{text.trim() ? <Markdown text={text} /> : null}
-				{tools.map((tool, i) => (
-					<div key={`${i}-${(tool as { name?: string }).name}`} className="text-text-muted">
-						→ {(tool as { name?: string }).name}
-					</div>
-				))}
-			</div>
-		);
-	}
-	return null;
-}
-
-function transcriptText(content: unknown): string {
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	return content
-		.filter((block: { type?: string }) => block.type === "text")
-		.map((block: { text?: string }) => block.text ?? "")
-		.join("\n");
 }
 
 function TrialTranscriptDialog({
@@ -723,87 +982,25 @@ function TrialTranscriptDialog({
 }
 
 function CompareDialog({
-	experimentId,
-	trials,
+	experiment,
 	onClose,
 	onError,
 }: {
-	experimentId: string;
-	trials: EvalTrialRecord[];
+	experiment: EvalExperiment;
 	onClose: () => void;
 	onError: (err: unknown) => void;
 }) {
-	const aggregates = useAppStore((s) => selectEvalConditionAggregates(s, experimentId));
-	const conditionIds = aggregates.map((a) => a.conditionId);
-	const [left, setLeft] = useState(conditionIds[0] ?? "");
-	const [right, setRight] = useState(conditionIds[1] ?? "");
-
-	const side = (conditionId: string) => {
-		const aggregate = aggregates.find((a) => a.conditionId === conditionId);
-		const latest = [...trials].reverse().find((t) => t.conditionId === conditionId);
-		return { aggregate, latest };
-	};
-	const l = side(left);
-	const r = side(right);
-	const delta =
-		l.aggregate?.avgCostUsd != null && r.aggregate?.avgCostUsd != null
-			? r.aggregate.avgCostUsd - l.aggregate.avgCostUsd
-			: null;
-
 	return (
 		<Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
 			<DialogContent className="max-w-[56rem]">
 				<DialogHeader>
 					<DialogTitle>Compare conditions</DialogTitle>
 				</DialogHeader>
-				{delta !== null ? (
-					<div className="tr-text-metadata text-text-muted">
-						avg cost delta ({right} vs {left}): {delta >= 0 ? "+" : "−"}$
-						{Math.abs(delta).toFixed(4)}
-					</div>
-				) : null}
-				<div className="grid grid-cols-2 gap-12">
-					{[
-						{ id: left, set: setLeft, data: l },
-						{ id: right, set: setRight, data: r },
-					].map((column, index) => (
-						<div key={index === 0 ? "left" : "right"} className="min-w-0">
-							<select
-								className={FIELD}
-								value={column.id}
-								onChange={(e) => column.set(e.target.value)}
-							>
-								{conditionIds.map((id) => (
-									<option key={id} value={id}>
-										{id}
-									</option>
-								))}
-							</select>
-							{column.data.aggregate ? (
-								<div className="py-4 tr-text-metadata text-text-muted">
-									{column.data.aggregate.trials} trials ·{" "}
-									{column.data.aggregate.passRate === null
-										? "—"
-										: `${Math.round(column.data.aggregate.passRate * 100)}% pass`}{" "}
-									·{" "}
-									{column.data.aggregate.avgCostUsd === null
-										? "—"
-										: `$${column.data.aggregate.avgCostUsd.toFixed(4)} avg`}
-								</div>
-							) : null}
-							<div className="max-h-[45vh] overflow-y-auto">
-								{column.data.latest ? (
-									<TrialTranscript
-										trial={toTrialRef(experimentId, column.data.latest)}
-										onError={onError}
-									/>
-								) : (
-									<div className="tr-text-metadata text-text-muted">No trials.</div>
-								)}
-							</div>
-						</div>
-					))}
-				</div>
+				<ExperimentCompare
+					candidates={[experiment]}
+					initialExperimentId={experiment.id}
+					onError={onError}
+				/>
 			</DialogContent>
 		</Dialog>
 	);

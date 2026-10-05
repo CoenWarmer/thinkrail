@@ -167,7 +167,14 @@ export interface PlanTab {
 	name: string;
 	sessionId: string;
 }
-export type EditorTab = FileTab | ChatTab | DocTab | DiffTab | PlanTab;
+export interface EvalResultsTab {
+	kind: "eval-results";
+	id: string;
+	workspaceId: string;
+	name: string;
+	experimentId: string;
+}
+export type EditorTab = FileTab | ChatTab | DocTab | DiffTab | PlanTab | EvalResultsTab;
 
 export function chatTabId(workspaceId: string, sessionId: string): string {
 	return tupleKey("chat", workspaceId, sessionId);
@@ -179,6 +186,9 @@ function editorResourceIdentity(tab: EditorTab): string {
 	}
 	if (tab.kind === "plan") {
 		return tupleKey("layout-resource", "document", "todo-plan", tab.sessionId);
+	}
+	if (tab.kind === "eval-results") {
+		return tupleKey("layout-resource", "document", "eval-experiment", tab.experimentId);
 	}
 	return layoutResourceIdentity(tab);
 }
@@ -965,7 +975,7 @@ interface AppState {
 		syncLayout?: boolean,
 		options?: LayoutOpenOptions,
 	) => void;
-	openDoc: (tab: DocTab | PlanTab) => void;
+	openDoc: (tab: DocTab | PlanTab | EvalResultsTab) => void;
 	closeTab: (
 		id: string,
 		syncLayout?: boolean,

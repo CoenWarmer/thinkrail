@@ -727,7 +727,10 @@ export function selectEvalConditionAggregates(
 	state: { evalTrialsByExperiment: Record<string, EvalTrialRecord[]> },
 	experimentId: string,
 ): EvalConditionAggregate[] {
-	const trials = state.evalTrialsByExperiment[experimentId] ?? [];
+	return aggregateEvalTrials(state.evalTrialsByExperiment[experimentId] ?? []);
+}
+
+export function aggregateEvalTrials(trials: readonly EvalTrialRecord[]): EvalConditionAggregate[] {
 	const order: string[] = [];
 	const grouped = new Map<string, EvalTrialRecord[]>();
 	for (const trial of trials) {

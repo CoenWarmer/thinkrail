@@ -66,9 +66,13 @@ deliberately outside this package so the package never touches `@thinkrail/serve
 - `run` binds `TrialSessionFactory` to `@thinkrail/server/agent` (`createSession`/`promptSession`/
   `abortSession`), using an **isolated `PI_CODING_AGENT_DIR`** under `<dataDir>/evals/agent-dir`
   with the developer's auth/models/settings copied in — trial sessions never pollute the
-  developer's own session history. Knobs the binding cannot yet enforce (specs toggle, skill set,
-  prompt variant) **fail loudly** instead of being silently ignored; model + thinking level are the
-  supported phase-1 treatments.
+  developer's own session history. Knobs this dev binding cannot yet enforce (specs toggle, skill
+  set, tool set, extensions, prompt variant) **fail loudly** instead of being silently ignored;
+  model + thinking level are its supported treatments. The phase-2 **host** binding
+  (`host/evalsRunner.ts`) enforces the full `Condition` knob set — `tools`/`skills`/`extensions`
+  allowlists, `specsAvailable`, and `promptVariant` (literal system-prompt suffix text) — through
+  the agent's session capability overrides, validating names against the trial workspace's
+  capability catalog before any session is created.
 - `report` aggregates `<dataDir>/evals/trials.jsonl` (optionally per experiment id).
 
 ## Boundary

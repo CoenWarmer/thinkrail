@@ -1,10 +1,13 @@
-// The eval.* wire shapes — rationale in SPEC.md § Evals (v77).
+// The eval.* wire shapes — rationale in SPEC.md § Evals (v77; knobs + capabilities v78; delete v79).
 
 export interface EvalFixtureConfig {
 	model?: string;
 	thinkingLevel?: string;
 	specsAvailable: boolean;
+	tools?: string[];
 	skills?: string[];
+	extensions?: string[];
+	/** Literal text appended to the session's system prompt. */
 	promptVariant?: string;
 }
 
@@ -22,6 +25,24 @@ export interface EvalCondition {
 	label?: string;
 	model?: string;
 	thinkingLevel?: string;
+	specsAvailable?: boolean;
+	tools?: string[];
+	skills?: string[];
+	extensions?: string[];
+	/** Literal text appended to the session's system prompt. */
+	promptVariant?: string;
+}
+
+export interface EvalCapabilityEntry {
+	id: string;
+	description?: string;
+}
+
+/** The catalog a trial session would actually load — the composer's checkbox options. */
+export interface EvalCapabilities {
+	tools: EvalCapabilityEntry[];
+	skills: EvalCapabilityEntry[];
+	extensions: EvalCapabilityEntry[];
 }
 
 export interface EvalBudget {

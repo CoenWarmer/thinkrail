@@ -168,6 +168,15 @@ export function toLayoutTab(tab: EditorTab): LayoutCenterTab | null {
 				sourceId: tab.sessionId,
 				docPath: "TODO.md",
 			};
+		case "eval-results":
+			return {
+				kind: "document",
+				id: tab.id,
+				name: tab.name,
+				documentKind: "eval-experiment",
+				sourceId: tab.experimentId,
+				docPath: "",
+			};
 	}
 }
 

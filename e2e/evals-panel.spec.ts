@@ -17,7 +17,8 @@ test("Evals is an unplaced tool: showable from a side group, with honest empty s
 	await expect(panel).toContainText("No experiments yet");
 	await expect(panel.getByTestId("eval-composer-open")).toBeDisabled();
 
-	// the promote picker lists this workspace's sessions (none yet in a fresh workspace)
+	// the promote picker settles on this workspace's session list (a new workspace opens one chat)
 	await panel.getByTestId("eval-promote-open").click();
-	await expect(page.getByRole("dialog")).toContainText(/No sessions|Loading/);
+	await expect(page.getByTestId("eval-promote-session").first()).toBeVisible();
+	await expect(page.getByRole("dialog")).not.toContainText("Loading sessions");
 });

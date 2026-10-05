@@ -86,6 +86,7 @@ import { WorkspaceChatHistory } from "./WorkspaceChatHistory";
 
 const ChatView = lazy(() => import("../chat/ChatView"));
 const PlanPane = lazy(() => import("../panels/PlanPane"));
+const EvalResultsPane = lazy(() => import("../panels/EvalResultsPane"));
 
 const NO_EDITOR_TABS: EditorTab[] = [];
 
@@ -455,6 +456,15 @@ export function WorkspaceWorkbench({ workspaceId }: { workspaceId: string }) {
 				return <ChatResourceBody workspaceId={workspaceId} tab={tab} onOpenFile={openToolFile} />;
 			}
 			if (tab.kind === "document") {
+				if (tab.documentKind === "eval-experiment") {
+					return (
+						<ErrorBoundary label="eval results" resetKeys={[workspaceId, tab.id]}>
+							<Suspense fallback={<MissingResource label="eval results" />}>
+								<EvalResultsPane workspaceId={workspaceId} experimentId={tab.sourceId} />
+							</Suspense>
+						</ErrorBoundary>
+					);
+				}
 				if (deletedSessions?.[tab.sourceId]) return <MissingResource label="plan" />;
 				return (
 					<ErrorBoundary label="plan" resetKeys={[workspaceId, tab.id]}>

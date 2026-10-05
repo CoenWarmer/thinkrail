@@ -3,7 +3,12 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
-import { buildResourceLoader, listProjectAliasSkillNames, listSkillCommands } from "./extensions";
+import {
+	buildResourceLoader,
+	listProjectAliasSkillNames,
+	listSessionCapabilityCatalog,
+	listSkillCommands,
+} from "./extensions";
 import type { SkillAdmissionContext } from "./skillAdmission";
 
 function ctx(trusted: boolean, acknowledged: string[] = []): SkillAdmissionContext {
@@ -320,6 +325,107 @@ describe("buildResourceLoader", () => {
 			writeSkill(join(project, ".claude", "skills"), "repo-late", "committed, appeared late");
 			await loader.reload();
 			expect(loader.getSkills().skills.some((skill) => skill.name === "repo-late")).toBe(false);
+		} finally {
+			restore();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("skillsAllowlist keeps only the named skills; an excluded bundled extension drops its tools", async () => {
+		const root = mkdtempSync(join(tmpdir(), "thinkrail-capability-overrides-"));
+		const project = join(root, "project");
+		const home = join(root, "home");
+		const agentDir = join(root, "pi-agent");
+		mkdirSync(project, { recursive: true });
+		mkdirSync(home, { recursive: true });
+		mkdirSync(agentDir, { recursive: true });
+		const restore = stubSkillEnv(home, agentDir);
+
+		try {
+			writeSkill(join(home, ".claude", "skills"), "kept-widget", "kept");
+			writeSkill(join(home, ".claude", "skills"), "dropped-widget", "dropped");
+			const settingsManager = SettingsManager.create(project, agentDir, { projectTrusted: true });
+			const loader = await buildResourceLoader(
+				project,
+				settingsManager,
+				() => ctx(true),
+				[],
+				[],
+				undefined,
+				{ skillsAllowlist: ["kept-widget"], excludedExtensionIds: ["pi-spec-graph"] },
+			);
+			const skillNames = loader.getSkills().skills.map((skill) => skill.name);
+			expect(skillNames).toContain("kept-widget");
+			expect(skillNames).not.toContain("dropped-widget");
+			const toolNames = loader
+				.getExtensions()
+				.extensions.flatMap((extension) => [...extension.tools.keys()]);
+			expect(toolNames).not.toContain("spec_grep");
+			expect(toolNames).toContain("visualize");
+		} finally {
+			restore();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("an unknown excluded extension id fails loudly", async () => {
+		const root = mkdtempSync(join(tmpdir(), "thinkrail-unknown-exclusion-"));
+		const project = join(root, "project");
+		const home = join(root, "home");
+		const agentDir = join(root, "pi-agent");
+		mkdirSync(project, { recursive: true });
+		mkdirSync(home, { recursive: true });
+		mkdirSync(agentDir, { recursive: true });
+		const restore = stubSkillEnv(home, agentDir);
+
+		try {
+			const settingsManager = SettingsManager.create(project, agentDir, { projectTrusted: true });
+			expect(
+				buildResourceLoader(project, settingsManager, () => ctx(true), [], [], undefined, {
+					excludedExtensionIds: ["pi-specgraph"],
+				}),
+			).rejects.toThrow(/Unknown excluded extension id/);
+		} finally {
+			restore();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("listSessionCapabilityCatalog", () => {
+	it("lists builtin + extension tools, skills, and extension ids (bundled names, cwd-relative paths)", async () => {
+		const root = mkdtempSync(join(tmpdir(), "thinkrail-capability-catalog-"));
+		const project = join(root, "project");
+		const home = join(root, "home");
+		const agentDir = join(root, "pi-agent");
+		mkdirSync(project, { recursive: true });
+		mkdirSync(home, { recursive: true });
+		mkdirSync(agentDir, { recursive: true });
+		const restore = stubSkillEnv(home, agentDir);
+
+		try {
+			writeSkill(join(home, ".claude", "skills"), "catalog-widget", "catalog fixture");
+			const extensionDir = join(project, ".pi", "extensions");
+			mkdirSync(extensionDir, { recursive: true });
+			writeFileSync(join(extensionDir, "local-ext.ts"), "export default function localExt() {}\n");
+			const catalog = await listSessionCapabilityCatalog(project, () => ctx(true));
+			const toolIds = catalog.tools.map((entry) => entry.id);
+			expect(toolIds).toEqual(expect.arrayContaining(["read", "bash", "edit", "write"]));
+			expect(toolIds).toContain("spec_grep");
+			expect(toolIds).toContain("ask_user_question");
+			expect(catalog.skills.map((entry) => entry.id)).toContain("catalog-widget");
+			const extensionIds = catalog.extensions.map((entry) => entry.id);
+			expect(extensionIds).toEqual(
+				expect.arrayContaining([
+					"pi-web-access",
+					"pi-visualize",
+					"pi-spec-graph",
+					"pi-thinkrail-workflow",
+					"pi-todos",
+				]),
+			);
+			expect(extensionIds).toContain(join(".pi", "extensions", "local-ext.ts"));
+			expect(extensionIds.every((id) => !id.includes("inline:"))).toBe(true);
 		} finally {
 			restore();
 			rmSync(root, { recursive: true, force: true });

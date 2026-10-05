@@ -130,7 +130,9 @@ selected-log state belong to chat integration, not domain persistence. See
   live chat runtimes, and resolved document markdown remain caches over their domain sources. Placement ids are stable within a workspace view; an id
   already owned by another semantic cache gets a collision-safe cache id. A virtual document is legal only
   when its local resource reference names a registered resolver plus durable source identity; `todo-plan`
-  resolves by session to the live `PlanPane`. Arbitrary inline markdown cannot enter persisted layout state.
+  resolves by session to the live `PlanPane`, and `eval-experiment` resolves by experiment id to the live
+  eval results pane (trials/aggregates re-read from the host, folded live from `eval.update`). Arbitrary
+  inline markdown cannot enter persisted layout state.
   An empty pre-hydration cache is never absence: a domain read must be authoritative for the current connection
   generation before reconciliation may prune a local reference.
 

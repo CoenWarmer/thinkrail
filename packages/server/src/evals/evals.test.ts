@@ -8,6 +8,7 @@ import type { TrialSessionFactory } from "@thinkrail/evals";
 import { captureSessionBaseline } from "../session-baseline";
 import { currentRunState, setEvalsPublisher, startRun, stopRun } from "./evalsRun";
 import {
+	deleteExperiment,
 	listExperiments,
 	listFixtures,
 	listTrials,
@@ -93,6 +94,17 @@ test("experiments round-trip per project and validate their fixture", async () =
 	expect(listExperiments("p2")).toEqual([]);
 	expect(() => saveExperiment("p1", experiment({ fixtureId: "missing" }))).toThrow();
 	expect(() => saveExperiment("p1", experiment({ trialsPerCondition: 0 }))).toThrow();
+});
+
+test("deleteExperiment removes the definition, scoped to the owning project", async () => {
+	await promoted("fx-1");
+	saveExperiment("p1", experiment());
+	expect(() => deleteExperiment("p2", "exp-1")).toThrow(/does not belong/);
+	expect(listExperiments("p1").map((e) => e.id)).toEqual(["exp-1"]);
+	deleteExperiment("p1", "exp-1");
+	expect(listExperiments("p1")).toEqual([]);
+	expect(() => deleteExperiment("p1", "exp-1")).toThrow(/Unknown experiment/);
+	expect(() => deleteExperiment("p1", "../fixtures/fx-1/project")).toThrow(/simple name/);
 });
 
 const okFactory: TrialSessionFactory = async ({ onEvent }) => ({

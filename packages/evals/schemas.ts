@@ -2,7 +2,10 @@ export type FixtureConfig = {
 	model?: string;
 	thinkingLevel?: string;
 	specsAvailable: boolean;
+	tools?: string[];
 	skills?: string[];
+	extensions?: string[];
+	/** Literal text appended to the session's system prompt. */
 	promptVariant?: string;
 };
 
@@ -33,7 +36,10 @@ export type Condition = {
 	model?: string;
 	thinkingLevel?: string;
 	specsAvailable?: boolean;
+	tools?: string[];
 	skills?: string[];
+	extensions?: string[];
+	/** Literal text appended to the session's system prompt. */
 	promptVariant?: string;
 };
 

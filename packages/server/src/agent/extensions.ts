@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import {
 	createSyntheticSourceInfo,
 	DefaultPackageManager,
@@ -15,6 +15,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { SkillCatalogEntry, SlashCommandInfo } from "@thinkrail/contracts";
 import specGraphExtension from "pi-spec-graph";
+import { BUNDLED_EXTENSION_PACKAGES } from "../buildSupport";
 import { type BundledTrashHelpers, setBundledTrashHelpers } from "../trash";
 import {
 	type AskUserQuestionWaiters,
@@ -60,18 +61,15 @@ let devPaths: { extensionPaths: string[]; skillPaths: string[] } | undefined;
 function resolveDevPaths(): { extensionPaths: string[]; skillPaths: string[] } {
 	if (devPaths) return devPaths;
 	const require = createRequire(import.meta.url);
-	const webAccessPath = require.resolve("pi-web-access/index.ts");
-	const visualizePath = require.resolve("pi-visualize/index.ts");
-	const specGraphPath = require.resolve("pi-spec-graph/index.ts");
-	const workflowPath = require.resolve("pi-thinkrail-workflow/index.ts");
-	const todosPath = require.resolve("pi-todos/index.ts");
+	const resolved = BUNDLED_EXTENSION_PACKAGES.map((pkg) => ({
+		...pkg,
+		path: require.resolve(`${pkg.name}/index.ts`),
+	}));
 	devPaths = {
-		extensionPaths: [webAccessPath, visualizePath, specGraphPath, workflowPath, todosPath],
-		skillPaths: [
-			join(dirname(specGraphPath), "skills"),
-			join(dirname(workflowPath), "skills"),
-			join(dirname(todosPath), "skills"),
-		],
+		extensionPaths: resolved.map((pkg) => pkg.path),
+		skillPaths: resolved
+			.filter((pkg) => pkg.skills)
+			.map((pkg) => join(dirname(pkg.path), "skills")),
 	};
 	return devPaths;
 }
@@ -120,7 +118,13 @@ function skillGroup(
 	return { group: "pi", isPlugin: false };
 }
 
-function skillsGate(cwd: string, bundledPaths: string[], getCtx: () => SkillAdmissionContext) {
+function skillsGate(
+	cwd: string,
+	bundledPaths: string[],
+	getCtx: () => SkillAdmissionContext,
+	allowlist?: readonly string[],
+) {
+	const allowed = allowlist === undefined ? null : new Set(allowlist);
 	return (current: { skills: Skill[]; diagnostics: ResourceDiagnostic[] }) => {
 		const ctx = getCtx();
 		const sources = discoverCompatibilitySkillSources(cwd);
@@ -132,6 +136,7 @@ function skillsGate(cwd: string, bundledPaths: string[], getCtx: () => SkillAdmi
 			skills: current.skills
 				.map((skill) => relabelAliasProvenance(skill, sources))
 				.filter((skill) => {
+					if (allowed !== null && !allowed.has(skill.name)) return false;
 					const { group, isPlugin } = skillGroup(skill.filePath, sources, bundledPaths);
 					return (
 						decideSkill(
@@ -147,6 +152,7 @@ function skillsGate(cwd: string, bundledPaths: string[], getCtx: () => SkillAdmi
 function resolveSkillInputs(
 	cwd: string,
 	getCtx: () => SkillAdmissionContext,
+	allowlist?: readonly string[],
 ): {
 	additionalSkillPaths: string[];
 	skillsOverride: ReturnType<typeof skillsGate>;
@@ -161,7 +167,7 @@ function resolveSkillInputs(
 			...personal.map((source) => source.path),
 			...project.map((source) => source.path),
 		],
-		skillsOverride: skillsGate(cwd, bundledSkillPaths, getCtx),
+		skillsOverride: skillsGate(cwd, bundledSkillPaths, getCtx, allowlist),
 	};
 }
 
@@ -189,6 +195,29 @@ export function childExtensionFactories(): ExtensionFactory[] {
 	return [headlessSearchPolicy, webAccessFactory(), specGraphExtension];
 }
 
+export interface SessionCapabilityOverrides {
+	/** Allowlist of skill names; skills outside it are dropped after admission filtering. */
+	skillsAllowlist?: readonly string[];
+	/** Bundled package names (e.g. "pi-spec-graph") and/or discovered extension paths to exclude. */
+	excludedExtensionIds?: readonly string[];
+}
+
+const bundledIndexByName = new Map(BUNDLED_EXTENSION_PACKAGES.map((pkg, i) => [pkg.name, i]));
+
+function splitExcludedIds(ids: readonly string[]): {
+	bundledIndexes: Set<number>;
+	paths: string[];
+} {
+	const bundledIndexes = new Set<number>();
+	const paths: string[] = [];
+	for (const id of ids) {
+		const index = bundledIndexByName.get(id);
+		if (index !== undefined) bundledIndexes.add(index);
+		else paths.push(id);
+	}
+	return { bundledIndexes, paths };
+}
+
 export async function buildResourceLoader(
 	cwd: string,
 	settingsManager: SettingsManager,
@@ -196,6 +225,7 @@ export async function buildResourceLoader(
 	excludedExtensionPaths: readonly string[] = [],
 	extraFactories: ExtensionFactory[] = [],
 	askUserQuestionWaiters: AskUserQuestionWaiters = createAskUserQuestionWaiters(),
+	capabilityOverrides?: SessionCapabilityOverrides,
 ): Promise<ResourceLoader> {
 	const sharedFactories = [
 		headlessSearchPolicy,
@@ -206,7 +236,10 @@ export async function buildResourceLoader(
 		oversizedImageGuard,
 		...extraFactories,
 	];
-	const skillInputs = resolveSkillInputs(cwd, getAdmission);
+	const { bundledIndexes, paths: overridePaths } = splitExcludedIds(
+		capabilityOverrides?.excludedExtensionIds ?? [],
+	);
+	const skillInputs = resolveSkillInputs(cwd, getAdmission, capabilityOverrides?.skillsAllowlist);
 	const agentDir = getAgentDir();
 	const common = {
 		cwd,
@@ -215,7 +248,11 @@ export async function buildResourceLoader(
 		...skillInputs,
 	};
 
-	const excluded = new Set(excludedExtensionPaths.map((path) => resolve(path)));
+	const resolvedOverridePaths = new Set(overridePaths.map((path) => resolve(cwd, path)));
+	const excluded = new Set([
+		...excludedExtensionPaths.map((path) => resolve(path)),
+		...resolvedOverridePaths,
+	]);
 	const discoveredExtensionPaths: string[] = [];
 	const discoveredMetadata = new Map<string, PathMetadata>();
 	if (excluded.size > 0) {
@@ -225,15 +262,24 @@ export async function buildResourceLoader(
 			agentDir,
 			settingsManager,
 		}).resolve();
+		const enabledPaths = new Set<string>();
 		for (const resource of resolvedResources.extensions) {
-			if (!resource.enabled || excluded.has(resolve(resource.path))) continue;
+			if (!resource.enabled) continue;
+			enabledPaths.add(resolve(resource.path));
+			if (excluded.has(resolve(resource.path))) continue;
 			discoveredExtensionPaths.push(resource.path);
 			discoveredMetadata.set(resolve(resource.path), resource.metadata);
 		}
+		const unknown = [...resolvedOverridePaths].filter((path) => !enabledPaths.has(path));
+		if (unknown.length > 0)
+			throw new Error(
+				`Unknown excluded extension id(s): ${unknown.join(", ")} — not a bundled package name or a discovered extension.`,
+			);
 	}
 
+	const keptByIndex = (_: unknown, i: number) => !bundledIndexes.has(i);
 	const additionalExtensionPaths = [
-		...(bundled ? [] : resolveDevPaths().extensionPaths),
+		...(bundled ? [] : resolveDevPaths().extensionPaths.filter(keptByIndex)),
 		...discoveredExtensionPaths,
 	];
 	const loader = new DefaultResourceLoader(
@@ -241,7 +287,7 @@ export async function buildResourceLoader(
 			? {
 					...common,
 					...(excluded.size > 0 ? { noExtensions: true, additionalExtensionPaths } : {}),
-					extensionFactories: [...bundled.factories, ...sharedFactories],
+					extensionFactories: [...bundled.factories.filter(keptByIndex), ...sharedFactories],
 				}
 			: {
 					...common,
@@ -260,6 +306,56 @@ export async function buildResourceLoader(
 		for (const tool of extension.tools.values()) tool.sourceInfo = extension.sourceInfo;
 	}
 	return loader;
+}
+
+export interface CapabilityCatalogEntry {
+	id: string;
+	description?: string;
+}
+
+export interface SessionCapabilityCatalog {
+	tools: CapabilityCatalogEntry[];
+	skills: CapabilityCatalogEntry[];
+	extensions: CapabilityCatalogEntry[];
+}
+
+const BUILTIN_TOOL_IDS = ["read", "bash", "edit", "write"] as const;
+
+/**
+ * What a capability-override-free session at `cwd` would load — the validation and checkbox
+ * catalog for eval conditions. Host-service tools (background commands, subagents) are not
+ * listed: subagents stay off in eval trials and background_command is session furniture.
+ */
+export async function listSessionCapabilityCatalog(
+	cwd: string,
+	getAdmission: () => SkillAdmissionContext,
+): Promise<SessionCapabilityCatalog> {
+	const settingsManager = SettingsManager.create(cwd, getAgentDir(), { projectTrusted: true });
+	const loader = await buildResourceLoader(cwd, settingsManager, getAdmission);
+	const tools: CapabilityCatalogEntry[] = BUILTIN_TOOL_IDS.map((id) => ({ id }));
+	const extensions: CapabilityCatalogEntry[] = BUNDLED_EXTENSION_PACKAGES.map(({ name }) => ({
+		id: name,
+	}));
+	const bundledResolvedPaths = new Set(
+		(bundled ? [] : resolveDevPaths().extensionPaths).map((path) => resolve(path)),
+	);
+	for (const extension of loader.getExtensions().extensions) {
+		for (const [name, tool] of extension.tools) {
+			if (tools.some((entry) => entry.id === name)) continue;
+			tools.push({ id: name, description: tool.definition.description });
+		}
+		const resolvedPath = resolve(extension.resolvedPath);
+		if (extension.replaceable || bundledResolvedPaths.has(resolvedPath)) continue;
+		if (extension.path.includes("inline:") || extension.hidden) continue;
+		extensions.push({
+			id: isUnderPath(resolvedPath, cwd) ? relative(resolve(cwd), resolvedPath) : extension.path,
+		});
+	}
+	const skills: CapabilityCatalogEntry[] = loader.getSkills().skills.map((skill) => ({
+		id: skill.name,
+		description: skill.description,
+	}));
+	return { tools, skills, extensions };
 }
 
 function admissionCacheKey(cwd: string, ctx: SkillAdmissionContext): string {

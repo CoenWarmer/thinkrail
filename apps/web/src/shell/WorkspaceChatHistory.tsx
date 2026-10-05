@@ -14,7 +14,8 @@ import { IconTooltip } from "../components/ui/tooltip";
 import { useNow } from "../components/useNow";
 import { cn, relativeTime } from "../lib";
 import { openChatInTab } from "../panels/openChat";
-import { type ClosedChat, selectWorkspaceById, toast, useAppStore } from "../store";
+import { fetchProjectEvals } from "../panels/useProjectEvals";
+import { type ClosedChat, toast, useAppStore } from "../store";
 import { errorText, getTransport } from "../transport";
 
 export function WorkspaceChatHistory({
@@ -270,21 +271,8 @@ function PromoteToFixtureButton({ workspaceId, chat }: { workspaceId: string; ch
 }
 
 async function refreshProjectEvals(workspaceId: string): Promise<void> {
-	const workspace = selectWorkspaceById(useAppStore.getState(), workspaceId);
-	if (!workspace) return;
-	const transport = getTransport();
 	try {
-		const [fixtures, experiments] = await Promise.all([
-			transport.request("eval.fixtures", { workspaceId }),
-			transport.request("eval.experiments", { workspaceId }),
-		]);
-		useAppStore
-			.getState()
-			.setProjectEvals(
-				workspace.projectId,
-				{ fixtures: fixtures.fixtures, experiments: experiments.experiments },
-				experiments.run,
-			);
+		await fetchProjectEvals(workspaceId);
 	} catch {
 		// the panel's own hydration recovers on the next activation
 	}

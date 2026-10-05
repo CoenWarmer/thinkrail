@@ -90,15 +90,17 @@ function promote(): void {
 	);
 }
 
-const THINKING_LEVELS = new Set<string>([
-	"off",
-	"minimal",
-	"low",
-	"medium",
-	"high",
-	"xhigh",
-	"max",
-] satisfies ThinkingLevel[]);
+// Record<ThinkingLevel, true> forces exhaustiveness: a level added to pi's union fails here.
+const THINKING_LEVEL_FLAGS: Record<ThinkingLevel, true> = {
+	off: true,
+	minimal: true,
+	low: true,
+	medium: true,
+	high: true,
+	xhigh: true,
+	max: true,
+};
+const THINKING_LEVELS = new Set<string>(Object.keys(THINKING_LEVEL_FLAGS));
 
 async function run(): Promise<void> {
 	const experimentPath = requireArg("experiment");
@@ -164,6 +166,12 @@ async function run(): Promise<void> {
 		if (condition.promptVariant !== fixture.config.promptVariant)
 			fail(
 				`condition ${condition.id}: prompt variants are not supported by the phase-1 CLI binding`,
+			);
+		if (JSON.stringify(condition.tools) !== JSON.stringify(fixture.config.tools))
+			fail(`condition ${condition.id}: tool sets are not supported by the phase-1 CLI binding`);
+		if (JSON.stringify(condition.extensions) !== JSON.stringify(fixture.config.extensions))
+			fail(
+				`condition ${condition.id}: extension sets are not supported by the phase-1 CLI binding`,
 			);
 	}
 

@@ -16,30 +16,13 @@ export function useProjectEvals(workspaceId: string | null): {
 	const generation = useRef(0);
 
 	const runRead = useCallback((id: string) => {
-		if (useAppStore.getState().removedWorkspaceIds[id]) return;
 		const mine = ++generation.current;
-		const live = () =>
-			generation.current === mine && !useAppStore.getState().removedWorkspaceIds[id];
-		const transport = getTransport();
-		Promise.all([
-			transport.request("eval.fixtures", { workspaceId: id }),
-			transport.request("eval.experiments", { workspaceId: id }),
-		])
-			.then(([fixtures, experiments]) => {
-				if (!live()) return;
-				const workspace = selectWorkspaceById(useAppStore.getState(), id);
-				if (!workspace) return;
-				useAppStore
-					.getState()
-					.setProjectEvals(
-						workspace.projectId,
-						{ fixtures: fixtures.fixtures, experiments: experiments.experiments },
-						experiments.run,
-					);
-				setFailedFor(null);
+		fetchProjectEvals(id)
+			.then((ok) => {
+				if (generation.current === mine && ok) setFailedFor(null);
 			})
 			.catch(() => {
-				if (live()) setFailedFor(id);
+				if (generation.current === mine) setFailedFor(id);
 			});
 	}, []);
 
@@ -57,4 +40,33 @@ export function useProjectEvals(workspaceId: string | null): {
 			if (workspaceId && supported) runRead(workspaceId);
 		},
 	};
+}
+
+const readGenerations = new Map<string, number>();
+
+/**
+ * The one eval read+fold: tombstone- and generation-guarded (a newer read for the same workspace
+ * invalidates an older in-flight one, so a slow hydration can never overwrite a fresher snapshot).
+ * Resolves false when skipped, rejects on failure.
+ */
+export async function fetchProjectEvals(workspaceId: string): Promise<boolean> {
+	if (useAppStore.getState().removedWorkspaceIds[workspaceId]) return false;
+	const mine = (readGenerations.get(workspaceId) ?? 0) + 1;
+	readGenerations.set(workspaceId, mine);
+	const transport = getTransport();
+	const [fixtures, experiments] = await Promise.all([
+		transport.request("eval.fixtures", { workspaceId }),
+		transport.request("eval.experiments", { workspaceId }),
+	]);
+	if (readGenerations.get(workspaceId) !== mine) return false;
+	const state = useAppStore.getState();
+	if (state.removedWorkspaceIds[workspaceId]) return false;
+	const workspace = selectWorkspaceById(state, workspaceId);
+	if (!workspace) return false;
+	state.setProjectEvals(
+		workspace.projectId,
+		{ fixtures: fixtures.fixtures, experiments: experiments.experiments },
+		experiments.run,
+	);
+	return true;
 }

@@ -28,6 +28,26 @@ test("an unset knob inherits the baseline; a set knob overrides it", () => {
 	});
 });
 
+test("capability knobs (tools, extensions, promptVariant) override and inherit like the rest", () => {
+	const base: FixtureConfig = {
+		...config,
+		tools: ["read", "bash"],
+		extensions: ["pi-spec-graph"],
+		promptVariant: "be terse",
+	};
+	expect(resolveCondition(base, { id: "inherit" })).toEqual({ id: "inherit", ...base });
+	const resolved = resolveCondition(base, {
+		id: "override",
+		tools: ["read"],
+		extensions: [],
+		promptVariant: "be verbose",
+	});
+	expect(resolved.tools).toEqual(["read"]);
+	expect(resolved.extensions).toEqual([]);
+	expect(resolved.promptVariant).toBe("be verbose");
+	expect(resolved.model).toBe(base.model);
+});
+
 test("knobs absent in both baseline and condition stay absent", () => {
 	const sparse: FixtureConfig = { specsAvailable: false };
 	const resolved = resolveCondition(sparse, { id: "c" });

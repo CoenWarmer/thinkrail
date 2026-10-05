@@ -348,7 +348,7 @@ function isWorkspaceView(value: unknown): value is WorkspaceViewState {
 			case "document":
 				return (
 					hasOnlyKeys(tab, ["kind", "id", "name", "documentKind", "sourceId", "docPath"]) &&
-					tab.documentKind === "todo-plan" &&
+					(tab.documentKind === "todo-plan" || tab.documentKind === "eval-experiment") &&
 					typeof tab.sourceId === "string" &&
 					typeof tab.docPath === "string"
 				);

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { EvalExperiment, EvalFixtureSummary, EvalTrialRecord } from "@thinkrail/contracts";
@@ -152,6 +152,17 @@ export function saveExperiment(projectId: string, experiment: EvalExperiment): E
 		`${JSON.stringify(envelope, null, "\t")}\n`,
 	);
 	return experiment;
+}
+
+export function deleteExperiment(projectId: string, experimentId: string): void {
+	if (!/^[\w][\w.-]*$/.test(experimentId))
+		throw new Error(`Experiment id "${experimentId}" must be a simple name.`);
+	const file = join(experimentsDir(), `${experimentId}.json`);
+	if (!existsSync(file)) throw new Error(`Unknown experiment: ${experimentId}`);
+	const envelope = JSON.parse(readFileSync(file, "utf8")) as ExperimentEnvelope;
+	if (envelope.projectId !== projectId)
+		throw new Error(`Experiment ${experimentId} does not belong to this project.`);
+	rmSync(file);
 }
 
 export function listExperiments(projectId: string): EvalExperiment[] {

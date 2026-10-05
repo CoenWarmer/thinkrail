@@ -51,6 +51,7 @@ import type {
 } from "./domain";
 import { isDelegationRunDetails } from "./domain";
 import type {
+	EvalCapabilities,
 	EvalConfirmedBudget,
 	EvalExperiment,
 	EvalFixtureSummary,
@@ -109,8 +110,8 @@ export type TemplateReadLocation =
 	| { projectId: string; workspaceId?: never }
 	| { workspaceId?: never; projectId?: never };
 
-export const PROTOCOL_VERSION = 77;
-export const EVALS_PROTOCOL_VERSION = 77;
+export const PROTOCOL_VERSION = 79;
+export const EVALS_PROTOCOL_VERSION = 79;
 export const CHANGE_MUTATIONS_PROTOCOL_VERSION = 75;
 export const RESOURCE_META_PROTOCOL_VERSION = 75;
 export const REVIEW_RICH_ANCHORS_PROTOCOL_VERSION = 74;
@@ -297,6 +298,8 @@ export const WS_METHODS = {
 	evalRun: "eval.run",
 	evalStop: "eval.stop",
 	evalTrialMessages: "eval.trialMessages",
+	evalCapabilities: "eval.capabilities",
+	evalDeleteExperiment: "eval.deleteExperiment",
 	templateList: "template.list",
 	templateGet: "template.get",
 	templateSave: "template.save",
@@ -809,6 +812,14 @@ export interface WsMethodMap {
 	"eval.trialMessages": {
 		params: { experimentId: string; conditionId: string; trial: number; sessionId: string };
 		result: { messages: TranscriptMessage[] };
+	};
+	"eval.capabilities": {
+		params: { workspaceId: string };
+		result: EvalCapabilities;
+	};
+	"eval.deleteExperiment": {
+		params: { workspaceId: string; experimentId: string };
+		result: Ack;
 	};
 	"template.list": {
 		params: TemplateReadLocation;

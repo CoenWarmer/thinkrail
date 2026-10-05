@@ -8,7 +8,9 @@ export function resolveCondition(config: FixtureConfig, condition: Condition): R
 		specsAvailable: condition.specsAvailable ?? config.specsAvailable,
 		...pick("model", condition, config),
 		...pick("thinkingLevel", condition, config),
+		...pick("tools", condition, config),
 		...pick("skills", condition, config),
+		...pick("extensions", condition, config),
 		...pick("promptVariant", condition, config),
 	};
 }
